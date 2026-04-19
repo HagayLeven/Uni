@@ -13,39 +13,29 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
 
-  /* ── Step 1: send OTP ── */
+  /* ── Step 1: send Magic Link ── */
   const sendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
     if (error) {
-      setError("שגיאה בשליחת הקוד — נסה שוב");
+      setError("שגיאה בשליחת הלינק — נסה שוב");
     } else {
       setStep("otp");
     }
     setLoading(false);
   };
 
-  /* ── Step 2: verify OTP ── */
+  /* ── Step 2: not used for magic link ── */
   const verifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError("");
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: otp.trim(),
-      type: "email",
-    });
-    if (error) {
-      setError("קוד שגוי או שפג תוקפו — נסה שוב");
-    } else {
-      window.location.replace("/dashboard");
-    }
-    setLoading(false);
   };
 
   return (
@@ -77,7 +67,7 @@ export default function AuthPage() {
             <>
               <div>
                 <h2 className="text-base font-bold text-white">כניסה / הרשמה</h2>
-                <p className="text-xs text-gray-400 mt-1">נשלח לך קוד כניסה לאימייל</p>
+                <p className="text-xs text-gray-400 mt-1">נשלח לך לינק כניסה לאימייל</p>
               </div>
 
               <form onSubmit={sendOtp} className="flex flex-col gap-3">
@@ -102,7 +92,7 @@ export default function AuthPage() {
                   disabled={loading || !email.trim()}
                   className="h-12 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
                 >
-                  {loading ? <Loader2 size={18} className="animate-spin" /> : "שלח קוד כניסה"}
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : "שלח לינק כניסה"}
                 </button>
               </form>
             </>
@@ -125,28 +115,17 @@ export default function AuthPage() {
                 </p>
               </div>
 
-              <form onSubmit={verifyOtp} className="flex flex-col gap-3">
-                <input
-                  type="text"
-                  value={otp}
-                  onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(""); }}
-                  placeholder="000000"
-                  dir="ltr"
-                  required
-                  autoFocus
-                  inputMode="numeric"
-                  className="w-full h-14 bg-gray-800 border border-gray-700 rounded-xl px-4 text-center text-2xl font-bold tracking-[0.5em] text-white placeholder:text-gray-600 focus:outline-none focus:border-indigo-500 transition-colors"
-                />
+              <div className="flex flex-col gap-4 text-center">
+                <div className="w-16 h-16 rounded-full bg-indigo-600/10 border border-indigo-500/30 flex items-center justify-center mx-auto text-3xl">
+                  📬
+                </div>
+                <p className="text-sm text-gray-300">
+                  שלחנו לינק כניסה ל-<br />
+                  <span className="text-indigo-400 font-medium" dir="ltr">{email}</span>
+                </p>
+                <p className="text-xs text-gray-500">לחץ על הלינק במייל כדי להיכנס לאפליקציה</p>
 
                 {error && <p className="text-xs text-red-400">{error}</p>}
-
-                <button
-                  type="submit"
-                  disabled={loading || otp.length < 6}
-                  className="h-12 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
-                >
-                  {loading ? <Loader2 size={18} className="animate-spin" /> : "כניסה"}
-                </button>
 
                 <button
                   type="button"
@@ -154,9 +133,17 @@ export default function AuthPage() {
                   disabled={loading}
                   className="text-xs text-gray-500 hover:text-indigo-400 transition-colors"
                 >
-                  לא קיבלת? שלח שוב
+                  {loading ? <Loader2 size={14} className="animate-spin mx-auto" /> : "לא קיבלת? שלח שוב"}
                 </button>
-              </form>
+
+                <button
+                  type="button"
+                  onClick={() => { setStep("email"); setError(""); }}
+                  className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                >
+                  שנה אימייל
+                </button>
+              </div>
             </>
           )}
         </div>
