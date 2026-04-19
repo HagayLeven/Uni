@@ -1,49 +1,99 @@
 "use client";
 
-import { Award, Flame, Star, TrendingUp, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Award, Flame, TrendingUp, Zap, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UniCharacter } from "@/components/uni/UniCharacter";
-
-// ─── Types ─────────────────────────────────────────────────────────────────────
-
-interface Badge {
-  id: string;
-  name: string;
-  icon: string;
-  tier: "bronze" | "silver" | "gold" | "platinum" | "legendary";
-  earned: boolean;
-}
-
-const BADGE_TIER_COLORS = {
-  bronze:    "text-orange-600",
-  silver:    "text-gray-400",
-  gold:      "text-yellow-400",
-  platinum:  "text-cyan-300",
-  legendary: "text-purple-400",
-};
-
-// ─── Mock data ─────────────────────────────────────────────────────────────────
-
-const mockXP = {
-  total: 1240,
-  level: 3,
-  label: "Junior",
-  nextLevelXP: 1500,
-  streak: 7,
-  rank: 42,
-};
-
-const mockBadges: Badge[] = [
-  { id: "1", name: "העלאה ראשונה",   icon: "📄", tier: "bronze",    earned: true  },
-  { id: "2", name: "מומחה תשובות",   icon: "💡", tier: "silver",    earned: true  },
-  { id: "3", name: "עוזר הקהילה",    icon: "🤝", tier: "gold",      earned: false },
-  { id: "4", name: "מלגאי אגדי",     icon: "👑", tier: "legendary", earned: false },
-];
-
-// ─── Component ─────────────────────────────────────────────────────────────────
+import { supabase } from "@/lib/supabase";
+import { getLevel } from "@/lib/xp";
+import { ALL_BADGES, BadgeStats } from "@/lib/badges";
+import { XP_VALUES } from "@/lib/xp";
 
 export function XPWidget() {
-  const progress = Math.round((mockXP.total / mockXP.nextLevelXP) * 100);
+  const [xp, setXp]             = useState(0);
+  const [streak, setStreak]     = useState(0);
+  const [rank, setRank]         = useState<number | null>(null);
+  const [badgeStats, setBadgeStats] = useState<BadgeStats | null>(null);
+  const [loading, setLoading]   = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("xp_override, bonus_xp, login_streak, longest_streak")
+        .eq("id", user.id)
+        .single();
+
+      // Posts count
+      const { count: posts } = await supabase
+        .from("posts").select("*", { count: "exact", head: true })
+        .eq("author_id", user.id).eq("is_announcement", false);
+
+      // Comments count
+      const { count: comments } = await supabase
+        .from("comments").select("*", { count: "exact", head: true })
+        .eq("author_id", user.id);
+
+      // Upvotes received
+      const { data: myPosts } = await supabase
+        .from("posts").select("id").eq("author_id", user.id);
+      const postIds = (myPosts ?? []).map((p: any) => p.id);
+      let upvotes = 0;
+      if (postIds.length) {
+        const { count } = await supabase
+          .from("votes").select("*", { count: "exact", head: true })
+          .in("post_id", postIds).eq("value", 1);
+        upvotes = count ?? 0;
+      }
+
+      const bonus = profile?.bonus_xp ?? 0;
+      const calculatedXp = profile?.xp_override != null
+        ? profile.xp_override
+        : (posts ?? 0) * XP_VALUES.post + (comments ?? 0) * XP_VALUES.comment + upvotes * XP_VALUES.upvote + bonus;
+
+      setXp(calculatedXp);
+      setStreak(profile?.login_streak ?? 0);
+      setBadgeStats({
+        xp: calculatedXp,
+        posts: posts ?? 0,
+        comments: comments ?? 0,
+        upvotes_received: upvotes,
+        login_streak: profile?.login_streak ?? 0,
+        longest_streak: profile?.longest_streak ?? 0,
+      });
+
+      // Rank — count users with more XP
+      const { data: allProfiles } = await supabase
+        .from("profiles").select("id, xp_override, bonus_xp");
+      if (allProfiles) {
+        const sorted = allProfiles
+          .map((p: any) => p.xp_override != null ? p.xp_override : (p.bonus_xp ?? 0))
+          .sort((a: number, b: number) => b - a);
+        setRank(sorted.findIndex((x: number) => x <= calculatedXp) + 1);
+      }
+
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const level = getLevel(xp);
+  const earnedBadges = badgeStats ? ALL_BADGES.filter(b => b.condition(badgeStats)) : [];
+  const displayBadges = ALL_BADGES.slice(0, 4);
+
+  if (loading) return (
+    <div className="space-y-4 animate-pulse">
+      <div className="card p-4 h-48 bg-gray-900" />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="card p-3 h-20 bg-gray-900" />
+        <div className="card p-3 h-20 bg-gray-900" />
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -54,26 +104,30 @@ export function XPWidget() {
             <Zap size={16} />
             <span className="text-sm font-semibold">ניקוד XP</span>
           </div>
-          <span className="text-xs text-gray-500">רמה {mockXP.level}</span>
+          <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", level.color, level.bg, level.border)}>
+            {level.name}
+          </span>
         </div>
 
-        {/* Level label */}
         <div className="text-center py-2 flex flex-col items-center gap-2">
-          <UniCharacter pose={mockXP.total >= 1000 ? "joyful" : "calm"} size={52} />
-          <p className="text-3xl font-bold text-white">{mockXP.total.toLocaleString("he-IL")}</p>
-          <p className="text-sm text-indigo-400 font-medium mt-1">{mockXP.label}</p>
+          <UniCharacter pose={xp >= 1000 ? "joyful" : "calm"} size={52} />
+          <p className="text-3xl font-bold text-white">{xp.toLocaleString("he-IL")}</p>
+          <p className="text-xs text-gray-500">רמה {level.level}</p>
         </div>
 
-        {/* XP Progress bar */}
+        {/* Progress bar */}
         <div>
           <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-            <span>{mockXP.total} XP</span>
-            <span>{mockXP.nextLevelXP} XP לרמה הבאה</span>
+            <span>{xp} XP</span>
+            {level.xpToNext > 0
+              ? <span>עוד {level.xpToNext} XP לרמה {level.level + 1}</span>
+              : <span className="text-yellow-400">רמה מקסימלית!</span>
+            }
           </div>
           <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
             <div
-              className="h-full xp-bar rounded-full transition-all duration-700"
-              style={{ width: `${progress}%` }}
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-700"
+              style={{ width: `${level.progress}%` }}
             />
           </div>
         </div>
@@ -84,12 +138,12 @@ export function XPWidget() {
         <StatCard
           icon={<Flame size={16} className="text-orange-400" />}
           label="סטריק"
-          value={`${mockXP.streak} ימים`}
+          value={`${streak} ימים`}
         />
         <StatCard
           icon={<TrendingUp size={16} className="text-green-400" />}
           label="דירוג"
-          value={`#${mockXP.rank}`}
+          value={rank ? `#${rank}` : "—"}
         />
       </div>
 
@@ -98,30 +152,22 @@ export function XPWidget() {
         <div className="flex items-center gap-2 mb-3">
           <Award size={15} className="text-yellow-400" />
           <span className="text-sm font-semibold text-gray-300">עיטורים</span>
+          <span className="text-xs text-gray-600 me-auto">{earnedBadges.length}/{ALL_BADGES.length}</span>
         </div>
         <div className="grid grid-cols-4 gap-2">
-          {mockBadges.map((badge) => (
-            <div
-              key={badge.id}
-              title={badge.name}
-              className={cn(
-                "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors",
-                badge.earned
-                  ? "bg-gray-800 border-gray-700"
-                  : "bg-gray-900/50 border-gray-800 opacity-40 grayscale",
-              )}
-            >
-              <span className="text-xl leading-none">{badge.icon}</span>
-              <span
+          {displayBadges.map((badge) => {
+            const earned = badgeStats ? badge.condition(badgeStats) : false;
+            return (
+              <div key={badge.id} title={badge.name}
                 className={cn(
-                  "text-[9px] font-medium leading-tight text-center",
-                  BADGE_TIER_COLORS[badge.tier],
-                )}
-              >
-                {badge.tier}
-              </span>
-            </div>
-          ))}
+                  "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors",
+                  earned ? "bg-gray-800 border-gray-700" : "bg-gray-900/50 border-gray-800 opacity-40 grayscale"
+                )}>
+                <span className="text-xl leading-none">{badge.emoji}</span>
+                <span className="text-[9px] text-gray-500 text-center leading-tight truncate w-full text-center">{badge.name}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -129,34 +175,24 @@ export function XPWidget() {
       <div className="card p-4 bg-gradient-to-br from-indigo-950 to-purple-950 border-indigo-800">
         <div className="flex items-center gap-2 mb-2">
           <Star size={15} className="text-yellow-400" />
-          <span className="text-sm font-semibold text-indigo-300">תכונות פרימיום</span>
+          <span className="text-sm font-semibold text-indigo-300">יעד הבא</span>
         </div>
         <p className="text-xs text-gray-400 mb-3">
-          הגע ל-1,500 XP לפתיחת סימולציית מבחן מלאה
+          הגע ל-500 XP לסטטוס לוחם שדה
         </p>
         <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-yellow-500 to-orange-400 rounded-full"
-            style={{ width: `${Math.min((mockXP.total / 1500) * 100, 100)}%` }}
-          />
+          <div className="h-full bg-gradient-to-r from-yellow-500 to-orange-400 rounded-full"
+            style={{ width: `${Math.min((xp / 500) * 100, 100)}%` }} />
         </div>
         <p className="text-xs text-gray-500 mt-1.5 text-end">
-          {Math.max(0, 1500 - mockXP.total)} XP נותרו
+          {Math.max(0, 500 - xp)} XP נותרו
         </p>
       </div>
     </div>
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="card p-3 flex flex-col items-center gap-1">
       {icon}
