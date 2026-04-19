@@ -1,0 +1,33 @@
+headers = []
+redirects = []
+
+[functions]
+
+[functions."*"]
+
+[[plugins]]
+origin = "config"
+package = "@netlify/plugin-nextjs"
+
+[plugins.inputs]
+
+[build]
+publish = "/Users/hagayleven/UniApp/frontend/.next"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "npm run build"
+base = "/Users/hagayleven/UniApp/frontend"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]

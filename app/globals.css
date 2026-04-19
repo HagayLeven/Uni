@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --sidebar-width: 280px;
+    --safe-top: env(safe-area-inset-top);
+    --safe-bottom: env(safe-area-inset-bottom);
+    --safe-left: env(safe-area-inset-left);
+    --safe-right: env(safe-area-inset-right);
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    overscroll-behavior-y: none;
+    font-family: var(--font-heebo), 'Heebo', system-ui, sans-serif;
+    font-feature-settings: "kern" 1;
+  }
+
+  /* Smooth native scroll on iOS */
+  main, [data-scroll], .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* RTL-aware scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-gray-700 rounded-full; }
+}
+
+@layer components {
+
+  /* ── Skeleton loader ──────────────────────────────────────────────── */
+  .skeleton {
+    @apply bg-gray-800 rounded-lg animate-pulse;
+  }
+
+  /* ── NSFW blur overlay ────────────────────────────────────────────── */
+  .nsfw-blur    { filter: blur(20px); transition: filter 0.3s ease; }
+  .nsfw-blur:hover { filter: blur(20px); }
+  .nsfw-revealed { filter: blur(0); }
+
+  /* ── XP bar gradient ──────────────────────────────────────────────── */
+  .xp-bar {
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  }
+
+  /* ── Vote button states ───────────────────────────────────────────── */
+  .vote-up-active   { @apply text-orange-400; }
+  .vote-down-active { @apply text-blue-400; }
+
+  /* ── Card base ────────────────────────────────────────────────────── */
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-xl;
+  }
+
+  /* ── Glassmorphism ────────────────────────────────────────────────── */
+  .glass {
+    background: rgba(15, 17, 28, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .glass-sidebar {
+    background: rgba(17, 19, 31, 0.85);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+
+  /* ── Hebrew-optimized line-height ─────────────────────────────────── */
+  .text-he {
+    line-height: 1.8;
+    letter-spacing: 0;
+  }
+}
+
+@layer utilities {
+  /* RTL-safe icon flip for directional icons */
+  .icon-rtl { transform: scaleX(-1); }
+}
+
+/* Skeleton shimmer animation */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #1f2130 25%,
+    #2a2d40 50%,
+    #1f2130 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.6s infinite linear;
+}

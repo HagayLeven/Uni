@@ -1,0 +1,36 @@
+{
+  "name": "uninexus-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:network": "next dev --hostname 0.0.0.0 --port 3000",
+    "build": "next build",
+    "export": "next build && npx cap sync ios",
+    "open:ios": "npx cap open ios",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.378.0",
+    "next": "14.2.3",
+    "next-auth": "^4.24.7",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-dropzone": "^14.2.3",
+    "react-markdown": "^9.0.1",
+    "swr": "^2.2.5",
+    "tailwind-merge": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5"
+  }
+}
