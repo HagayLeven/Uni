@@ -15,7 +15,10 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "UniNexus",
+    title: "Uni",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
   },
   formatDetection: {
     telephone: false,

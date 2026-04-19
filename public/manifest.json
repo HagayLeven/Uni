@@ -1,7 +1,7 @@
 {
-  "name": "UniNexus",
-  "short_name": "UniNexus",
-  "description": "רשת הלמידה האקדמית לסטודנטים ישראלים",
+  "name": "Uni — פרמדיקים מד\"א",
+  "short_name": "Uni",
+  "description": "פלטפורמת למידה לפרמדיקים ואנשי מד\"א",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#030712",
