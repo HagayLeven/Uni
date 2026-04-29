@@ -44,20 +44,22 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080B14] flex flex-col items-center justify-center px-5 py-10 relative overflow-hidden" dir="rtl">
+    <div className="min-h-screen relative flex flex-col items-center justify-center px-5 py-10 overflow-hidden" dir="rtl">
 
-      {/* Background glow */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full bg-indigo-600/10 blur-[140px]" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-violet-700/10 blur-[120px]" />
-      </div>
+      {/* Background image */}
+      <img src="/logoAmbulance.jpeg"
+        className="absolute inset-0 w-full h-full object-cover object-center"
+        alt="" aria-hidden />
 
-      <div className="relative w-full max-w-[360px] flex flex-col gap-6">
+      {/* Dark overlay */}
+      <div className="absolute inset-0 bg-black/65 backdrop-blur-[1px]" />
+
+      <div className="relative z-10 w-full max-w-[360px] flex flex-col gap-6">
 
         {/* Logo */}
         <div className="flex flex-col items-center gap-3 mb-2">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-600 shadow-lg shadow-indigo-600/30 flex items-center justify-center text-3xl">
-            🦉
+          <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg shadow-indigo-600/30 border border-indigo-500/30">
+            <img src="/logoowl.jpeg" alt="Uni" className="w-full h-full object-cover object-top" />
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold text-white tracking-tight">Uni</h1>

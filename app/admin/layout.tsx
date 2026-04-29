@@ -12,6 +12,9 @@ import {
   Activity,
   Eye,
   GitBranch,
+  Megaphone,
+  TrendingUp,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +23,15 @@ const NAV: { href: string; icon: React.ElementType; label: string; badge?: numbe
   { href: "/admin/users",        icon: Users,           label: "משתמשים"       },
   { href: "/admin/assignments",  icon: GitBranch,       label: "שיוכים"        },
   { href: "/admin/faculties",    icon: BookOpen,        label: "קהילות ומסלולים"},
+  { href: "/admin/courses",      icon: BookOpen,        label: "קורסים"        },
+  { href: "/admin/exams",        icon: BookOpen,        label: "מבחנים"        },
+  { href: "/admin/exam-analysis",icon: TrendingUp,      label: "ניתוח מבחנים"  },
+  { href: "/admin/attendance",   icon: Users,           label: "נוכחות"        },
+  { href: "/admin/courses/weeks", icon: BookOpen,       label: "שבועות קורס"   },
+  { href: "/admin/broadcast",    icon: Megaphone,      label: "שליחת הודעה"   },
+  { href: "/admin/progress",     icon: TrendingUp,     label: "מעקב התקדמות"  },
+  { href: "/admin/work-plan",    icon: Target,         label: "תוכנית עבודה"  },
+  { href: "/admin/activity",     icon: Activity,       label: "פעילות חניכים" },
   { href: "/admin/moderation",   icon: ShieldAlert,     label: "מודרציה"       },
   { href: "/admin/settings",     icon: Settings,        label: "הגדרות"        },
 ];
@@ -91,7 +103,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Activity size={13} className="text-green-400" />
             <span className="text-green-400 font-medium">Live</span>
             <span>·</span>
-            <span>UniNexus Admin</span>
+            <span>Uni Admin</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-bold">

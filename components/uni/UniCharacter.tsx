@@ -58,16 +58,10 @@ export function UniCharacter({ pose = "core", size = 40, animate = false, classN
         height={size}
         className="w-full h-full object-cover"
         onError={(e) => {
-          // Fallback to emoji if image not found
+          // Fallback to logo image if pose-specific image not found
           const el = e.currentTarget;
-          el.style.display = "none";
-          const parent = el.parentElement;
-          if (parent && !parent.querySelector(".uni-emoji")) {
-            const span = document.createElement("span");
-            span.className = "uni-emoji text-2xl";
-            span.textContent = POSE_EMOJI[pose];
-            span.style.fontSize = `${size * 0.55}px`;
-            parent.appendChild(span);
+          if (el.src.includes("/uni/")) {
+            el.src = "/logoowl.jpeg";
           }
         }}
       />

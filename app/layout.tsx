@@ -9,8 +9,8 @@ const heebo = Heebo({
 });
 
 export const metadata: Metadata = {
-  title: "UniNexus — רשת הלמידה האקדמית",
-  description: "פלטפורמת למידה שיתופית מבוססת AI לסטודנטים ישראלים",
+  title: "Uni — פלטפורמת הלמידה של פרמדיקי מד\"א",
+  description: "פלטפורמת למידה שיתופית לפרמדיקי ואנשי מד\"א",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

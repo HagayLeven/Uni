@@ -9,14 +9,21 @@ interface Profile {
   full_name: string | null;
   avatar_url: string | null;
   faculty: string | null;
+  role?: string | null;
   created_at: string;
   email?: string;
 }
 
-const FACULTIES = [
-  "פראמדיקים", "מדעי המחשב", "הנדסת חשמל", "רפואה",
-  "משפטים", "מנהל עסקים", "פסיכולוגיה", "כלכלה",
-  "ביולוגיה", "מתמטיקה", "הנדסה אזרחית",
+const COMMUNITIES = [
+  "קהילת פראמדיקים",
+  "קהילת חובשים",
+  "קהילת כוננים",
+];
+
+const ROLES = [
+  "מנהל מערכת",
+  "מדריך ראשי",
+  "מדריך",
 ];
 
 function timeAgo(d: string) {
@@ -30,14 +37,15 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [editing, setEditing] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState<string | null>(null);
+  const [editing, setEditing]     = useState<Record<string, string>>({});
+  const [editingRole, setEditingRole] = useState<Record<string, string>>({});
+  const [saving, setSaving]       = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name, avatar_url, faculty, created_at")
+        .select("id, full_name, avatar_url, faculty, role, created_at")
         .order("created_at", { ascending: false });
       setUsers((data as Profile[]) ?? []);
       setLoading(false);
@@ -64,6 +72,15 @@ export default function AdminUsersPage() {
     await supabase.from("profiles").update({ faculty }).eq("id", id);
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, faculty } : u));
     setEditing((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    setSaving(null);
+  };
+
+  const saveRole = async (id: string) => {
+    const role = editingRole[id] ?? null;
+    setSaving(id + "_role");
+    await supabase.from("profiles").update({ role: role || null }).eq("id", id);
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role } : u));
+    setEditingRole((prev) => { const n = { ...prev }; delete n[id]; return n; });
     setSaving(null);
   };
 
@@ -100,7 +117,7 @@ export default function AdminUsersPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-gray-800 bg-gray-800/40">
               <tr>
-                {["משתמש", "פקולטה / קהילה", "הצטרף", "פעולות"].map((h) => (
+                {["משתמש", "קהילה", "תפקיד", "הצטרף", "פעולות"].map((h) => (
                   <th key={h} className="text-start px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     {h}
                   </th>
@@ -139,7 +156,7 @@ export default function AdminUsersPage() {
                           className="h-8 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs text-gray-100 focus:outline-none focus:border-indigo-500"
                         >
                           <option value="">— בחר —</option>
-                          {FACULTIES.map((f) => <option key={f} value={f}>{f}</option>)}
+                          {COMMUNITIES.map((f) => <option key={f} value={f}>{f}</option>)}
                         </select>
                         {isDirty && (
                           <button
@@ -148,6 +165,31 @@ export default function AdminUsersPage() {
                             className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition-colors"
                           >
                             {saving === u.id
+                              ? <Loader2 size={12} className="animate-spin text-white" />
+                              : <Save size={12} className="text-white" />}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Role */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={editingRole[u.id] ?? u.role ?? ""}
+                          onChange={(e) => setEditingRole((prev) => ({ ...prev, [u.id]: e.target.value }))}
+                          className="h-8 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs text-gray-100 focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="">— ללא תפקיד —</option>
+                          {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                        {editingRole[u.id] !== undefined && editingRole[u.id] !== (u.role ?? "") && (
+                          <button
+                            onClick={() => saveRole(u.id)}
+                            disabled={saving === u.id + "_role"}
+                            className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+                          >
+                            {saving === u.id + "_role"
                               ? <Loader2 size={12} className="animate-spin text-white" />
                               : <Save size={12} className="text-white" />}
                           </button>

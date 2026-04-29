@@ -109,22 +109,27 @@ function FeedEmptyState() {
 export function Feed() {
   const [sort, setSort] = useState<SortMode>("hot");
   const [filter, setFilter] = useState<FilterType>("all");
+  const [scope, setScope] = useState<"community" | "all">("community");
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userFaculty, setUserFaculty] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchPosts() {
       setLoading(true);
 
-      // Get current user's votes
+      // Get current user's votes + profile
       const { data: { user } } = await supabase.auth.getUser();
       let myVotes: Record<string, number> = {};
+      let faculty: string | null = null;
       if (user) {
-        const { data: voteData } = await supabase
-          .from("votes")
-          .select("post_id, value")
-          .eq("user_id", user.id);
+        const [{ data: voteData }, { data: profile }] = await Promise.all([
+          supabase.from("votes").select("post_id, value").eq("user_id", user.id),
+          supabase.from("profiles").select("faculty").eq("id", user.id).single(),
+        ]);
         (voteData ?? []).forEach((v: any) => { myVotes[v.post_id] = v.value; });
+        faculty = profile?.faculty ?? null;
+        setUserFaculty(faculty);
       }
 
       let query = supabase
@@ -138,9 +143,20 @@ export function Feed() {
           downvotes,
           sensitivity,
           created_at,
-          profiles ( full_name, avatar_url ),
+          profiles ( full_name, avatar_url, faculty ),
           topics ( title )
         `);
+
+      // Filter by community scope
+      if (scope === "community" && faculty) {
+        // Get all user IDs in same faculty
+        const { data: peers } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("faculty", faculty);
+        const peerIds = (peers ?? []).map((p: any) => p.id);
+        if (peerIds.length) query = query.in("author_id", peerIds);
+      }
 
       // Filter by type
       if (filter !== "all") {
@@ -193,7 +209,7 @@ export function Feed() {
     }
 
     fetchPosts();
-  }, [sort, filter]);
+  }, [sort, filter, scope]);
 
   const SORT_LABELS: Record<SortMode, string> = {
     hot: "🔥 חם",
@@ -213,6 +229,22 @@ export function Feed() {
 
   return (
     <div className="space-y-4">
+      {/* Community scope toggle */}
+      {userFaculty && (
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 bg-gray-800/60 border border-gray-700/60 rounded-lg p-0.5">
+            {(["community", "all"] as const).map((s) => (
+              <button key={s} onClick={() => setScope(s)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  scope === s ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-gray-200"
+                }`}>
+                {s === "community" ? `🏠 ${userFaculty}` : "🌐 הכל"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Filter / sort bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         {/* Type filters */}

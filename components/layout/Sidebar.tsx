@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BookOpen, ChevronDown, ChevronLeft, Gamepad2, Home, MessageSquare,
-  Plus, Settings, Shield, Sparkles, Trophy, Users, User, Rss, X, Check,
+  BookMarked, BookOpen, ChevronDown, ChevronLeft, ClipboardList,
+  Gamepad2, Home, MessageSquare, Plus, Settings, Shield, Sparkles,
+  Trophy, Users, User, Rss, X, Check, LogOut,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -13,14 +14,17 @@ import { cn } from "@/lib/utils";
 const ADMIN_EMAIL = "hagayas2001@gmail.com";
 
 const NAV_ITEMS = [
-  { icon: Home,          label: "ראשי",       href: "/dashboard"   },
-  { icon: Rss,           label: "פיד קהילה",  href: "/feed"        },
-  { icon: Sparkles,      label: "מדריך AI",    href: "/tutor"       },
-  { icon: Trophy,        label: "לוח הישגים", href: "/leaderboard" },
-  { icon: Gamepad2,      label: "משחקים",     href: "/games"       },
-  { icon: MessageSquare, label: "הודעות",      href: "/messages", badge: 0 },
-  { icon: User,          label: "פרופיל",      href: "/profile"     },
-  { icon: Settings,      label: "הגדרות",      href: "/settings"    },
+  { icon: Home,          label: "ראשי",            href: "/dashboard"   },
+  { icon: BookOpen,      label: "הקורס שלי",        href: "/course"      },
+  { icon: Rss,           label: "פיד קהילה",       href: "/feed"        },
+  { icon: BookMarked,    label: "אוגדנים",          href: "/notebooks"   },
+  { icon: ClipboardList, label: "מבחנים",           href: "/exams"       },
+  { icon: Sparkles,      label: "מדריך AI",         href: "/tutor"       },
+  { icon: Trophy,        label: "לוח הישגים",       href: "/leaderboard" },
+  { icon: Gamepad2,      label: "משחקים",           href: "/games"       },
+  { icon: MessageSquare, label: "הודעות",            href: "/messages", badge: 0 },
+  { icon: User,          label: "פרופיל",           href: "/profile"     },
+  { icon: Settings,      label: "הגדרות",           href: "/settings"    },
 ];
 
 interface Channel { id: string; title: string; }
@@ -32,8 +36,10 @@ export function Sidebar() {
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [faculty, setFaculty] = useState("פראמדיקים");
+  const [faculty, setFaculty] = useState("");
+  const [courseName, setCourseName] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminCourses, setAdminCourses] = useState<{id: string; name: string}[]>([]);
 
   // ── Channels (topics) ───────────────────────────────────────
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -57,7 +63,7 @@ export function Sidebar() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name, avatar_url, faculty")
+        .select("full_name, avatar_url, faculty, course_id, courses(name)")
         .eq("id", user.id)
         .single();
 
@@ -65,6 +71,12 @@ export function Sidebar() {
         setUserName(profile.full_name ?? "");
         setAvatarUrl(profile.avatar_url ?? null);
         if (profile.faculty) setFaculty(profile.faculty);
+        if ((profile as any).courses?.name) setCourseName((profile as any).courses.name);
+      }
+
+      if (user.email === ADMIN_EMAIL) {
+        const { data: courses } = await supabase.from("courses").select("id, name").order("name");
+        setAdminCourses(courses ?? []);
       }
     }
 
@@ -143,9 +155,11 @@ export function Sidebar() {
           <BookOpen size={18} className="text-white" />
         </div>
         <div>
-          <span className="font-bold text-white text-base leading-none">UniNexus</span>
+          <span className="font-bold text-white text-base leading-none">Uni</span>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <p className="text-xs text-gray-500">{faculty}</p>
+            <p className="text-xs text-gray-500">
+              {courseName ?? (faculty ? `קהילת ${faculty}` : "Uni")}
+            </p>
             {isAdmin && (
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gradient-to-r from-orange-500 to-red-500 text-white leading-none animate-pulse">
                 ADMIN
@@ -251,6 +265,23 @@ export function Sidebar() {
         </div>
       </nav>
 
+      {/* Admin courses quick-access */}
+      {isAdmin && adminCourses.length > 0 && (
+        <div className="px-3 pb-2 space-y-1">
+          <p className="px-3 text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1">הקורסים שלי</p>
+          {adminCourses.map(c => (
+            <Link key={c.id} href={`/course/${c.id}`}
+              className={cn("flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                pathname === `/course/${c.id}`
+                  ? "bg-indigo-600/20 text-indigo-300 border border-indigo-600/30"
+                  : "text-gray-400 hover:text-gray-100 hover:bg-gray-800")}>
+              <BookOpen size={13} />
+              <span className="truncate">{c.name}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
       {/* Admin button */}
       {isAdmin && (
         <div className="px-3 pb-2">
@@ -282,11 +313,19 @@ export function Sidebar() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-500">{faculty}</p>
+            <p className="text-xs text-gray-500">
+              {courseName ?? (faculty ? `קהילת ${faculty}` : "")}
+            </p>
           </div>
           <Link href="/settings" className="p-1.5 text-gray-600 hover:text-gray-400 transition-colors">
             <Settings size={15} />
           </Link>
+          <button
+            onClick={async () => { await supabase.auth.signOut(); window.location.href = "/auth/login"; }}
+            className="p-1.5 text-gray-600 hover:text-red-400 transition-colors"
+            title="התנתק">
+            <LogOut size={15} />
+          </button>
         </div>
       </div>
     </aside>

@@ -7,7 +7,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import {
   Bell, Camera, Check, ChevronLeft, Eye,
   ExternalLink, GraduationCap, Loader2, Lock,
-  Shield, Trash2, User,
+  Shield, Trash2, User, LogOut,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,14 @@ export default function SettingsPage() {
                   </div>
                 </button>
               ))}
+              <div className="mt-auto pt-3 border-t border-gray-800">
+                <button
+                  onClick={async () => { await supabase.auth.signOut(); window.location.href = "/auth/login"; }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl w-full text-start hover:bg-red-500/10 transition-colors group">
+                  <LogOut size={16} className="text-gray-600 group-hover:text-red-400 transition-colors shrink-0" />
+                  <p className="text-sm font-medium text-gray-500 group-hover:text-red-400 transition-colors">התנתק</p>
+                </button>
+              </div>
             </nav>
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-28 md:pb-6">
@@ -98,16 +106,27 @@ export default function SettingsPage() {
 
 // ─── Profile Section ───────────────────────────────────────────────────────────
 
-const STUDY_TRACKS = [
-  "פראמדיק בסיסי", "פראמדיק מתקדם", "EMT",
-  "רופא חירום", "נהג אמבולנס", "מנהל תחנה",
+const COMMUNITIES = [
+  "קהילת פראמדיקים",
+  "קהילת חובשים",
+  "קהילת כוננים",
 ];
 
-const MDA_INSTITUTIONS = [
-  "מרכז הדרכה ארצי — רמלה",
-  "מחוז ירושלים", "מחוז תל אביב", "מחוז חיפה",
-  "מחוז צפון", "מחוז דרום", "מחוז שרון",
-  "מחוז דן-פת״מ", "מחוז ש״י",
+const STUDY_TRACKS = [
+  "מגיש עזרה ראשונה",
+  "חובשים",
+  "חובשים בכירים",
+  "קורס פראמדיקים",
+];
+
+const STATIONS = [
+  "אשדוד",
+  "אשקלון",
+  "קרית גת",
+  "גן יבנה",
+  "שדרות",
+  "קרית מלאכי",
+  "יד בנימין",
 ];
 
 function ProfileSection() {
@@ -116,7 +135,6 @@ function ProfileSection() {
   const [faculty, setFaculty]         = useState("");
   const [studyTrack, setStudyTrack]   = useState("");
   const [institution, setInstitution] = useState("");
-  const [communities, setCommunities] = useState<{ id: string; name: string }[]>([]);
   const [userId, setUserId]           = useState<string | null>(null);
   const [saving, setSaving]           = useState(false);
   const [uploading, setUploading]     = useState(false);
@@ -142,14 +160,7 @@ function ProfileSection() {
         setInstitution((data as any).institution ?? "");
       }
     }
-    async function loadCommunities() {
-      try {
-        const { data } = await supabase.from("communities").select("id, name").order("name");
-        if (data) setCommunities(data);
-      } catch { /* communities table may not exist yet */ }
-    }
     load();
-    loadCommunities();
   }, []);
 
   const handleSave = async () => {
@@ -257,8 +268,8 @@ function ProfileSection() {
             className="w-full h-11 bg-gray-800 border border-gray-700 rounded-xl px-4 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 transition-colors appearance-none"
           >
             <option value="">בחר קהילה...</option>
-            {communities.map((c) => (
-              <option key={c.id} value={c.name}>{c.name}</option>
+            {COMMUNITIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
             ))}
           </select>
         </div>
@@ -278,14 +289,14 @@ function ProfileSection() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-400 mb-2">תחנת / מחוז מד"א</label>
+          <label className="block text-xs font-semibold text-gray-400 mb-2">תחנה</label>
           <select
             value={institution}
             onChange={(e) => setInstitution(e.target.value)}
             className="w-full h-11 bg-gray-800 border border-gray-700 rounded-xl px-4 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 transition-colors appearance-none"
           >
             <option value="">בחר תחנה...</option>
-            {MDA_INSTITUTIONS.map((t) => (
+            {STATIONS.map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>

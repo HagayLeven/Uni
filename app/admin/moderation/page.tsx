@@ -26,40 +26,7 @@ const SENSITIVITY_CONFIG: Record<SensitivityType, { label: string; color: string
   misinformation: { label: "מידע שגוי",     color: "text-purple-400 bg-purple-500/10 border-purple-500/30" },
 };
 
-const MOCK_FLAGS: FlaggedItem[] = [
-  {
-    id: "1", type: "post",
-    title: "תמונות מניתוח לא מסומנות כרגיש",
-    author: "user_anon_44", course: "אנטומיה — MED301",
-    reportCount: 5, sensitivity: "nsfw", aiConfidence: 0.94,
-    reportedAt: "לפני 10 דקות",
-    preview: "צירפתי תמונות מהניתוח של אתמול...",
-  },
-  {
-    id: "2", type: "comment",
-    title: "תגובה פוגענית כלפי משתמש אחר",
-    author: "dan.k@gmail.com", course: "אלגברה — 20581",
-    reportCount: 3, sensitivity: "harassment", aiConfidence: 0.81,
-    reportedAt: "לפני 25 דקות",
-    preview: "את לא מבינה כלום, תלכי תלמדי בסיסי...",
-  },
-  {
-    id: "3", type: "post",
-    title: "שיתוף 'סיכום' שהוא בעצם פרסומת",
-    author: "promo_bot_2", course: "מבוא למחשב — 20441",
-    reportCount: 8, sensitivity: "spam", aiConfidence: 0.97,
-    reportedAt: "לפני שעה",
-    preview: "הי כולם! יש לי את הסיכום הכי טוב + קישור לאתר...",
-  },
-  {
-    id: "4", type: "post",
-    title: "שאלת מבחן עם תשובות שגויות",
-    author: "student_x99", course: "חשבון — 20407",
-    reportCount: 2, sensitivity: "misinformation", aiConfidence: 0.72,
-    reportedAt: "לפני 3 שעות",
-    preview: "שאלה 4: התשובה היא C כי... (לא מדויק)",
-  },
-];
+const MOCK_FLAGS: FlaggedItem[] = [];
 
 export default function AdminModerationPage() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());

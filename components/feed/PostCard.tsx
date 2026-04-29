@@ -9,6 +9,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { NSFWBlur } from "@/components/shared/NSFWBlur";
 import { cn } from "@/lib/utils";
+import { sendNotification } from "@/lib/notifications";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,8 +53,10 @@ const POST_TYPE_CONFIG: Record<PostType, { label: string; color: string }> = {
 
 // ─── VoteBar ───────────────────────────────────────────────────────────────────
 
-function VoteBar({ postId, initialScore, initialVote }: {
+function VoteBar({ postId, postAuthorId, postTitle, initialScore, initialVote }: {
   postId: string;
+  postAuthorId?: string;
+  postTitle: string;
   initialScore: number;
   initialVote: VoteValue;
 }) {
@@ -81,6 +84,16 @@ function VoteBar({ postId, initialScore, initialVote }: {
       const prev = vote === null ? 0 : vote === "up" ? -1 : 1;
       setScore((s) => s + val + prev);
       setVote(v);
+
+      // Notify post author on upvote
+      if (v === "up" && postAuthorId) {
+        sendNotification({
+          userId: postAuthorId,
+          type: "upvote",
+          title: `מישהו אהב את הפוסט שלך: ${postTitle.slice(0, 40)}`,
+          link: `/post/${postId}`,
+        });
+      }
     }
   };
 
@@ -213,6 +226,8 @@ export function PostCard({ post }: { post: Post }) {
     <article className="card p-4 flex gap-3 hover:border-gray-700 transition-colors">
       <VoteBar
         postId={post.id}
+        postAuthorId={post.authorId}
+        postTitle={post.title}
         initialScore={post.score}
         initialVote={post.userVote}
       />
