@@ -6,10 +6,11 @@ import { usePathname } from "next/navigation";
 import {
   BookMarked, BookOpen, ChevronDown, ChevronLeft, ClipboardList,
   Gamepad2, Home, MessageSquare, Plus, Settings, Shield, Sparkles,
-  Trophy, Users, User, Rss, X, Check, LogOut,
+  Trophy, Users, User, Rss, X, Check, LogOut, Stethoscope,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { canAccessSimulator } from "@/lib/simulatorAccess";
 
 const ADMIN_EMAIL = "hagayas2001@gmail.com";
 
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { icon: Gamepad2,      label: "משחקים",           href: "/games"       },
   { icon: MessageSquare, label: "הודעות",            href: "/messages", badge: 0 },
   { icon: User,          label: "פרופיל",           href: "/profile"     },
+  { icon: Stethoscope,   label: "סימולטור מד״א",    href: "/simulator"   },
   { icon: Settings,      label: "הגדרות",           href: "/settings"    },
 ];
 
@@ -39,6 +41,7 @@ export function Sidebar() {
   const [faculty, setFaculty] = useState("");
   const [courseName, setCourseName] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [canSimulator, setCanSimulator] = useState(false);
   const [adminCourses, setAdminCourses] = useState<{id: string; name: string}[]>([]);
 
   // ── Channels (topics) ───────────────────────────────────────
@@ -63,7 +66,7 @@ export function Sidebar() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name, avatar_url, faculty, course_id, courses(name)")
+        .select("full_name, avatar_url, faculty, course_id, role, courses(name)")
         .eq("id", user.id)
         .single();
 
@@ -72,6 +75,9 @@ export function Sidebar() {
         setAvatarUrl(profile.avatar_url ?? null);
         if (profile.faculty) setFaculty(profile.faculty);
         if ((profile as any).courses?.name) setCourseName((profile as any).courses.name);
+        setCanSimulator(canAccessSimulator((profile as any)?.role, (profile as any)?.faculty, user.email));
+      } else {
+        setCanSimulator(canAccessSimulator(null, null, user.email));
       }
 
       if (user.email === ADMIN_EMAIL) {
@@ -102,23 +108,9 @@ export function Sidebar() {
     if (!name) return;
     setSaving(true);
 
-    // Match community by user's faculty name
-    const { data: community } = await supabase
-      .from("communities")
-      .select("id")
-      .eq("name", faculty)
-      .maybeSingle();
-
-    // Fallback: first community in DB
-    const { data: fallback } = !community
-      ? await supabase.from("communities").select("id").limit(1).maybeSingle()
-      : { data: null };
-
-    const communityId = community?.id ?? fallback?.id ?? null;
-
     const { data, error } = await supabase
       .from("topics")
-      .insert({ title: name, ...(communityId ? { community_id: communityId } : {}) })
+      .insert({ title: name })
       .select("id, title")
       .single();
 
@@ -158,7 +150,7 @@ export function Sidebar() {
           <span className="font-bold text-white text-base leading-none">Uni</span>
           <div className="flex items-center gap-1.5 mt-0.5">
             <p className="text-xs text-gray-500">
-              {courseName ?? (faculty ? `קהילת ${faculty}` : "Uni")}
+              {courseName ?? faculty ?? "Uni"}
             </p>
             {isAdmin && (
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gradient-to-r from-orange-500 to-red-500 text-white leading-none animate-pulse">
@@ -173,6 +165,7 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5">
 
         {NAV_ITEMS.map((item) => {
+          if (item.href === "/simulator" && !canSimulator) return null;
           const active = pathname === item.href;
           return (
             <Link key={item.href} href={item.href}
@@ -314,7 +307,7 @@ export function Sidebar() {
               )}
             </div>
             <p className="text-xs text-gray-500">
-              {courseName ?? (faculty ? `קהילת ${faculty}` : "")}
+              {courseName ?? faculty ?? ""}
             </p>
           </div>
           <Link href="/settings" className="p-1.5 text-gray-600 hover:text-gray-400 transition-colors">

@@ -8,13 +8,9 @@ import { XPWidget } from "@/components/layout/XPWidget";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { OnboardingModal } from "@/components/ui/OnboardingModal";
-import { WorkPlanWidget } from "@/components/dashboard/WorkPlanWidget";
-import { JoinCoursePrompt } from "@/components/dashboard/JoinCoursePrompt";
-
 export default function DashboardPage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userId, setUserId]   = useState<string | null>(null);
-  const [hasCourse, setHasCourse] = useState(true);
 
   useEffect(() => {
     async function checkOnboarding() {
@@ -23,11 +19,10 @@ export default function DashboardPage() {
       setUserId(user.id);
       const { data: profile } = await supabase
         .from("profiles")
-        .select("onboarding_done, course_id")
+        .select("onboarding_done")
         .eq("id", user.id)
         .single();
       if (!profile?.onboarding_done) setShowOnboarding(true);
-      setHasCourse(!!profile?.course_id);
     }
     checkOnboarding();
   }, []);
@@ -46,8 +41,6 @@ export default function DashboardPage() {
         </main>
         <aside className="hidden xl:flex flex-col w-72 shrink-0 border-s border-gray-800 p-4 gap-4 overflow-y-auto">
           <XPWidget />
-          {!hasCourse && <JoinCoursePrompt />}
-          {hasCourse && <WorkPlanWidget />}
         </aside>
       </div>
       <BottomNav />

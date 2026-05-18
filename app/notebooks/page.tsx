@@ -61,13 +61,9 @@ function FileAttachment({ url, name }: { url: string; name: string }) {
 
 export default function NotebooksPage() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
-  const [communities, setCommunities] = useState<{id: string; name: string}[]>([]);
   const [loading, setLoading]     = useState(true);
   const [isAdmin, setIsAdmin]     = useState(false);
   const [userId, setUserId]       = useState<string | null>(null);
-  const [userFaculty, setUserFaculty] = useState<string | null>(null);
-  const [userCommunityId, setUserCommunityId] = useState<string | null>(null);
-  const [communityFilter, setCommunityFilter] = useState<string>("all");
   const [category, setCategory]   = useState<Category>("all");
   const [search, setSearch]       = useState("");
   const [open, setOpen]           = useState<Notebook | null>(null);
@@ -85,26 +81,11 @@ export default function NotebooksPage() {
       if (user) {
         setUserId(user.id);
         setIsAdmin(admin);
-        const { data: profile } = await supabase.from("profiles").select("faculty").eq("id", user.id).single();
-        const faculty = profile?.faculty ?? null;
-        setUserFaculty(faculty);
-
-        // Find user's community by faculty name
-        if (faculty) {
-          const { data: comm } = await supabase.from("communities").select("id").eq("name", faculty).maybeSingle();
-          if (comm) setUserCommunityId(comm.id);
-        }
-      }
-
-      // Load communities for admin filter
-      if (admin) {
-        const { data: comms } = await supabase.from("communities").select("id, name").order("name");
-        setCommunities(comms ?? []);
       }
 
       const { data } = await supabase
         .from("notebooks")
-        .select("*, profiles(full_name), communities(name)")
+        .select("*, profiles(full_name)")
         .order("created_at", { ascending: false });
       setNotebooks((data as any) ?? []);
       setLoading(false);
@@ -113,10 +94,6 @@ export default function NotebooksPage() {
   }, []);
 
   const filtered = notebooks.filter((n: any) => {
-    // Non-admin: show only own community notebooks
-    if (!isAdmin && userCommunityId && n.community_id !== userCommunityId && n.community_id !== null) return false;
-    // Admin with community filter
-    if (isAdmin && communityFilter !== "all" && n.community_id !== communityFilter) return false;
     if (category !== "all" && n.category !== category) return false;
     if (search && !n.title.toLowerCase().includes(search.toLowerCase()) && !(n.body ?? "").toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -191,27 +168,6 @@ export default function NotebooksPage() {
               )}
             </div>
 
-            {/* Admin: community filter | Student: community label */}
-            {isAdmin && communities.length > 0 && (
-              <div className="flex gap-1 flex-wrap bg-gray-800/60 border border-gray-700/60 rounded-lg p-0.5 w-fit">
-                <button onClick={() => setCommunityFilter("all")}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${communityFilter === "all" ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-gray-200"}`}>
-                  🌐 הכל
-                </button>
-                {communities.map(c => (
-                  <button key={c.id} onClick={() => setCommunityFilter(c.id)}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${communityFilter === c.id ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-gray-200"}`}>
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            {!isAdmin && userFaculty && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-lg w-fit">
-                <span className="text-xs text-indigo-400 font-medium">🏠 {userFaculty}</span>
-              </div>
-            )}
-
             {/* Search + filter */}
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -263,11 +219,6 @@ export default function NotebooksPage() {
                   <h3 className="text-sm font-semibold text-gray-100">{n.title}</h3>
                   {n.body && <p className="text-xs text-gray-500 line-clamp-2">{n.body}</p>}
                   <div className="flex items-center gap-2">
-                    {(n as any).communities?.name && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-500 border border-gray-700">
-                        {(n as any).communities.name}
-                      </span>
-                    )}
                     {n.profiles?.full_name && (
                       <p className="text-[10px] text-gray-600">נוסף ע"י {n.profiles.full_name}</p>
                     )}

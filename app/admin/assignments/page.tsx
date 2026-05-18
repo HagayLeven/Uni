@@ -9,38 +9,16 @@ interface Profile {
   full_name: string | null;
   avatar_url: string | null;
   faculty: string | null;
-  study_track: string | null;
-  institution: string | null;
   xp_override: number | null;
 }
-
-interface Community { id: string; name: string; }
-
-const STUDY_TRACKS = [
-  "מגיש עזרה ראשונה",
-  "חובשים",
-  "חובשים בכירים",
-  "קורס פראמדיקים",
-];
-
-const MDA_INSTITUTIONS = [
-  "אשדוד",
-  "אשקלון",
-  "קרית גת",
-  "גן יבנה",
-  "שדרות",
-  "קרית מלאכי",
-  "יד בנימין",
-];
 
 type Saving = { id: string; field: string } | null;
 
 export default function AdminAssignmentsPage() {
   const [users, setUsers] = useState<Profile[]>([]);
-  const [communities, setCommunities] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filterCommunity, setFilterCommunity] = useState("all");
+  const [filterFaculty, setFilterFaculty] = useState("all");
   const [saving, setSaving] = useState<Saving>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [xpEditing, setXpEditing] = useState<string | null>(null);
@@ -48,12 +26,11 @@ export default function AdminAssignmentsPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: profiles }, { data: comms }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, avatar_url, faculty, study_track, institution, xp_override").order("full_name"),
-        supabase.from("communities").select("id, name").order("name"),
-      ]);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, faculty, xp_override")
+        .order("full_name");
       setUsers((profiles as Profile[]) ?? []);
-      setCommunities(comms ?? []);
       setLoading(false);
     }
     load();
@@ -71,8 +48,8 @@ export default function AdminAssignmentsPage() {
   const filtered = users.filter((u) => {
     const q = search.toLowerCase();
     const matchSearch = (u.full_name ?? "").toLowerCase().includes(q);
-    const matchCommunity = filterCommunity === "all" || u.faculty === filterCommunity;
-    return matchSearch && matchCommunity;
+    const matchFaculty = filterFaculty === "all" || u.faculty === filterFaculty;
+    return matchSearch && matchFaculty;
   });
 
   const isSaving = (id: string, field: string) => saving?.id === id && saving?.field === field;
@@ -127,12 +104,14 @@ export default function AdminAssignmentsPage() {
           />
         </div>
         <select
-          value={filterCommunity}
-          onChange={(e) => setFilterCommunity(e.target.value)}
+          value={filterFaculty}
+          onChange={(e) => setFilterFaculty(e.target.value)}
           className="h-9 bg-gray-800 border border-gray-700 rounded-lg px-3 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
         >
-          <option value="all">כל הקהילות</option>
-          {communities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+          <option value="all">כל היחידות</option>
+          {Array.from(new Set(users.map(u => u.faculty).filter(Boolean))).map((f) => (
+            <option key={f!} value={f!}>{f}</option>
+          ))}
           <option value="">ללא שיוך</option>
         </select>
       </div>
@@ -147,7 +126,7 @@ export default function AdminAssignmentsPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-gray-800 bg-gray-800/40">
               <tr>
-                {["משתמש", "קהילה / יחידה", "מסלול לימוד", "תחנת מד\"א", "XP"].map((h) => (
+                {["משתמש", "קהילה / יחידה", "XP"].map((h) => (
                   <th key={h} className="text-start px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     {h}
                   </th>
@@ -173,51 +152,17 @@ export default function AdminAssignmentsPage() {
                     </div>
                   </td>
 
-                  {/* Community */}
+                  {/* Faculty */}
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-1.5">
-                      <select
+                      <input
                         defaultValue={u.faculty ?? ""}
-                        onChange={(e) => save(u.id, "faculty", e.target.value)}
+                        onBlur={(e) => save(u.id, "faculty", e.target.value)}
+                        placeholder="יחידה / מחוז"
                         className="h-8 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs text-gray-100 focus:outline-none focus:border-indigo-500 max-w-[160px]"
-                      >
-                        <option value="">— בחר —</option>
-                        {communities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-                      </select>
+                      />
                       {isSaving(u.id, "faculty") && <Loader2 size={12} className="animate-spin text-indigo-400" />}
                       {isSaved(u.id, "faculty")  && <Check size={12} className="text-green-400" />}
-                    </div>
-                  </td>
-
-                  {/* Study track */}
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-1.5">
-                      <select
-                        defaultValue={u.study_track ?? ""}
-                        onChange={(e) => save(u.id, "study_track", e.target.value)}
-                        className="h-8 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs text-gray-100 focus:outline-none focus:border-indigo-500 max-w-[160px]"
-                      >
-                        <option value="">— בחר —</option>
-                        {STUDY_TRACKS.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                      {isSaving(u.id, "study_track") && <Loader2 size={12} className="animate-spin text-indigo-400" />}
-                      {isSaved(u.id, "study_track")  && <Check size={12} className="text-green-400" />}
-                    </div>
-                  </td>
-
-                  {/* Institution */}
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-1.5">
-                      <select
-                        defaultValue={u.institution ?? ""}
-                        onChange={(e) => save(u.id, "institution", e.target.value)}
-                        className="h-8 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs text-gray-100 focus:outline-none focus:border-indigo-500 max-w-[160px]"
-                      >
-                        <option value="">— בחר —</option>
-                        {MDA_INSTITUTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                      {isSaving(u.id, "institution") && <Loader2 size={12} className="animate-spin text-indigo-400" />}
-                      {isSaved(u.id, "institution")  && <Check size={12} className="text-green-400" />}
                     </div>
                   </td>
 
@@ -279,7 +224,7 @@ export default function AdminAssignmentsPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-gray-600">לא נמצאו משתמשים</td>
+                  <td colSpan={3} className="px-4 py-12 text-center text-gray-600">לא נמצאו משתמשים</td>
                 </tr>
               )}
             </tbody>

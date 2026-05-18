@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, BookMarked, GraduationCap, Home, Plus } from "lucide-react";
+import { Bell, BookMarked, GraduationCap, Home, Plus, Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { CreatePostModal } from "@/components/feed/CreatePostModal";
+import { canAccessSimulator } from "@/lib/simulatorAccess";
 
 export function BottomNav() {
   const pathname    = usePathname();
   const [createOpen, setCreateOpen] = useState(false);
   const [unread, setUnread]         = useState(0);
   const [courseId, setCourseId]     = useState<string | null>(null);
+  const [canSimulator, setCanSimulator] = useState(false);
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -22,8 +24,9 @@ export function BottomNav() {
       if (!user) return;
 
       const { data: profile } = await supabase
-        .from("profiles").select("course_id").eq("id", user.id).single();
+        .from("profiles").select("course_id, role, faculty").eq("id", user.id).single();
       setCourseId(profile?.course_id ?? null);
+      setCanSimulator(canAccessSimulator((profile as any)?.role, (profile as any)?.faculty, user.email));
 
       const { count } = await supabase
         .from("notifications")
@@ -78,6 +81,7 @@ export function BottomNav() {
             label="הקורס שלי"
             active={pathname.startsWith("/course")}
           />
+          {canSimulator && <NavItem href="/simulator" icon={Stethoscope} label="סימולטור" active={pathname.startsWith("/simulator")} />}
           <NavItem href="/notifications" icon={Bell} label="התראות" active={pathname === "/notifications"} badge={unread} />
         </div>
       </nav>

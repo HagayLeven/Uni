@@ -6,7 +6,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import {
   Bell, Camera, Check, ChevronLeft, Eye,
-  ExternalLink, GraduationCap, Loader2, Lock,
+  ExternalLink, Loader2, Lock,
   Shield, Trash2, User, LogOut,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -106,36 +106,11 @@ export default function SettingsPage() {
 
 // ─── Profile Section ───────────────────────────────────────────────────────────
 
-const COMMUNITIES = [
-  "קהילת פראמדיקים",
-  "קהילת חובשים",
-  "קהילת כוננים",
-];
-
-const STUDY_TRACKS = [
-  "מגיש עזרה ראשונה",
-  "חובשים",
-  "חובשים בכירים",
-  "קורס פראמדיקים",
-];
-
-const STATIONS = [
-  "אשדוד",
-  "אשקלון",
-  "קרית גת",
-  "גן יבנה",
-  "שדרות",
-  "קרית מלאכי",
-  "יד בנימין",
-];
-
 function ProfileSection() {
-  const [fullName, setFullName]       = useState("");
-  const [avatarUrl, setAvatarUrl]     = useState<string | null>(null);
-  const [faculty, setFaculty]         = useState("");
-  const [studyTrack, setStudyTrack]   = useState("");
-  const [institution, setInstitution] = useState("");
-  const [userId, setUserId]           = useState<string | null>(null);
+  const [fullName, setFullName]   = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [faculty, setFaculty]     = useState("");
+  const [userId, setUserId]       = useState<string | null>(null);
   const [saving, setSaving]           = useState(false);
   const [uploading, setUploading]     = useState(false);
   const [saved, setSaved]             = useState(false);
@@ -149,15 +124,13 @@ function ProfileSection() {
       setUserId(user.id);
       const { data } = await supabase
         .from("profiles")
-        .select("full_name, avatar_url, faculty, study_track, institution")
+        .select("full_name, avatar_url, faculty")
         .eq("id", user.id)
         .single();
       if (data) {
         setFullName(data.full_name ?? "");
         setAvatarUrl(data.avatar_url ?? null);
         setFaculty(data.faculty ?? "");
-        setStudyTrack((data as any).study_track ?? "");
-        setInstitution((data as any).institution ?? "");
       }
     }
     load();
@@ -170,7 +143,7 @@ function ProfileSection() {
     const { error } = await supabase
       .from("profiles")
       .upsert(
-        { id: userId, full_name: fullName, faculty, study_track: studyTrack || null, institution: institution || null },
+        { id: userId, full_name: fullName, faculty },
         { onConflict: "id" }
       );
     if (error) {
@@ -259,46 +232,17 @@ function ProfileSection() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1.5">
-            <GraduationCap size={12} /> קהילה / יחידה
-          </label>
+          <label className="block text-xs font-semibold text-gray-400 mb-2">קהילה / יחידה</label>
           <select
             value={faculty}
             onChange={(e) => setFaculty(e.target.value)}
-            className="w-full h-11 bg-gray-800 border border-gray-700 rounded-xl px-4 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 transition-colors appearance-none"
+            className="w-full h-11 bg-gray-800 border border-gray-700 rounded-xl px-4 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 transition-colors"
           >
-            <option value="">בחר קהילה...</option>
-            {COMMUNITIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-400 mb-2">מסלול לימוד</label>
-          <select
-            value={studyTrack}
-            onChange={(e) => setStudyTrack(e.target.value)}
-            className="w-full h-11 bg-gray-800 border border-gray-700 rounded-xl px-4 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 transition-colors appearance-none"
-          >
-            <option value="">בחר מסלול...</option>
-            {STUDY_TRACKS.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-400 mb-2">תחנה</label>
-          <select
-            value={institution}
-            onChange={(e) => setInstitution(e.target.value)}
-            className="w-full h-11 bg-gray-800 border border-gray-700 rounded-xl px-4 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 transition-colors appearance-none"
-          >
-            <option value="">בחר תחנה...</option>
-            {STATIONS.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
+            <option value="">— בחר קהילה —</option>
+            <option value="אדמיניסטרציה">אדמיניסטרציה</option>
+            <option value="קהילת פראמדיקים">קהילת פראמדיקים</option>
+            <option value="קהילת חובשים">קהילת חובשים</option>
+            <option value="קהילת כוננים">קהילת כוננים</option>
           </select>
         </div>
 

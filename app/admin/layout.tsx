@@ -14,7 +14,6 @@ import {
   GitBranch,
   Megaphone,
   TrendingUp,
-  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,8 +29,7 @@ const NAV: { href: string; icon: React.ElementType; label: string; badge?: numbe
   { href: "/admin/courses/weeks", icon: BookOpen,       label: "שבועות קורס"   },
   { href: "/admin/broadcast",    icon: Megaphone,      label: "שליחת הודעה"   },
   { href: "/admin/progress",     icon: TrendingUp,     label: "מעקב התקדמות"  },
-  { href: "/admin/work-plan",    icon: Target,         label: "תוכנית עבודה"  },
-  { href: "/admin/activity",     icon: Activity,       label: "פעילות חניכים" },
+{ href: "/admin/activity",     icon: Activity,       label: "פעילות חניכים" },
   { href: "/admin/moderation",   icon: ShieldAlert,     label: "מודרציה"       },
   { href: "/admin/settings",     icon: Settings,        label: "הגדרות"        },
 ];
