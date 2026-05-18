@@ -348,11 +348,21 @@ function ExamContent() {
           {/* Edit tab content */}
           {activeTab === "edit" && canEdit && (
             <div className="space-y-4 mb-6">
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
-                <p className="text-xs text-amber-400 font-medium">✏️ עריכת תרחיש — סגל בלבד. השינויים יישמרו לכלל המשתמשים.</p>
+              {/* Banner + full editor link */}
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-center justify-between gap-3">
+                <p className="text-xs text-amber-400 font-medium">✏️ עריכת תרחיש — סגל בלבד. שינויים משפיעים על כלל המשתמשים.</p>
+                <Link
+                  href={`/simulator/scenarios/${scenario.code}`}
+                  target="_blank"
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-colors"
+                >
+                  עורך מלא ↗
+                </Link>
               </div>
+
+              {/* Quick: story */}
               <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-2">מלל תרחיש</label>
+                <label className="block text-xs font-semibold text-gray-400 mb-2">תיאור תרחיש (עריכה מהירה)</label>
                 <textarea
                   value={editStory}
                   onChange={(e) => setEditStory(e.target.value)}
@@ -360,8 +370,10 @@ function ExamContent() {
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 focus:outline-none focus:border-amber-500 transition-colors resize-none"
                 />
               </div>
+
+              {/* Quick: vitals */}
               <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-2">מדדים</label>
+                <label className="block text-xs font-semibold text-gray-400 mb-2">מדדים ראשוניים</label>
                 <div className="grid grid-cols-2 gap-2">
                   {Object.entries(editVitals).map(([key, val]) => {
                     const VITAL_LABELS: Record<string, string> = { pulse: "דופק", bp: "לחץ דם", spo2: "SpO2", rr: "נשימות", temp: "חום", gcs: "GCS" };
@@ -378,6 +390,7 @@ function ExamContent() {
                   })}
                 </div>
               </div>
+
               {editError && <p className="text-xs text-red-400">{editError}</p>}
               <button
                 onClick={handleEditSave}
@@ -385,8 +398,12 @@ function ExamContent() {
                 className="w-full h-11 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
               >
                 {editSaving ? <Loader2 size={16} className="animate-spin" /> : null}
-                {editSaving ? "שומר..." : editSaved ? "✓ נשמר!" : "שמור שינויים"}
+                {editSaving ? "שומר..." : editSaved ? "✓ נשמר!" : "שמור שינויים מהירים"}
               </button>
+
+              <p className="text-center text-xs text-gray-600">
+                לעריכת שלבים, פעולות, רובריקה ומדדים לאחר טיפול — השתמש ב<Link href={`/simulator/scenarios/${scenario.code}`} target="_blank" className="text-amber-400 hover:underline">עורך המלא</Link>
+              </p>
             </div>
           )}
 
