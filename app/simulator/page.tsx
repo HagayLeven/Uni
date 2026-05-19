@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Stethoscope, Search, GraduationCap, Archive, BookOpen, Dumbbell, Pencil, X, Save, Loader2, Settings } from "lucide-react";
+import { Stethoscope, Search, GraduationCap, Archive, BookOpen, Dumbbell, Pencil, X, Save, Loader2, Plus } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { mdaScenarios, categoryLabels, categoryColors } from "@/lib/mdaScenarios";
@@ -29,7 +29,7 @@ const CATEGORY_OPTIONS: { value: Category; label: string }[] = [
 function canEditScenarios(role?: string | null, faculty?: string | null, email?: string | null): boolean {
   if (email === "hagayas2001@gmail.com") return true;
   if (faculty === "אדמיניסטרציה") return true;
-  return ["root", "מנהל מערכת"].includes(role ?? "");
+  return ["root", "מנהל מערכת", "מדריך ראשי"].includes(role ?? "");
 }
 
 export default function SimulatorHubPage() {
@@ -56,7 +56,7 @@ export default function SimulatorHubPage() {
 
   useEffect(() => {
     async function loadOverrides() {
-      const { data } = await supabase.from("mda_scenarios").select("id, story, vitals");
+      const { data } = await supabase.from("mda_scenarios").select("id, story, vitals").eq("graduation_only", false);
       if (data) {
         const map: Record<string, ScenarioOverride> = {};
         data.forEach((row: ScenarioOverride) => { map[row.id] = row; });
@@ -121,11 +121,11 @@ export default function SimulatorHubPage() {
               </Link>
               {canEdit && (
                 <Link
-                  href="/simulator/scenarios"
-                  className="flex items-center justify-center gap-1.5 min-h-[44px] px-3 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-400 hover:text-white text-sm transition-colors"
-                  title="עריכת תרחישים"
+                  href="/simulator/scenarios/new"
+                  className="flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 text-white text-sm font-semibold transition-colors shrink-0"
                 >
-                  <Settings size={16} />
+                  <Plus size={16} />
+                  תרחיש חדש
                 </Link>
               )}
             </div>

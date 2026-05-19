@@ -22,9 +22,12 @@ export default function AuthPage() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError("אימייל או סיסמה שגויים");
-    else window.location.replace("/dashboard");
+    const { error, data } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { setError("אימייל או סיסמה שגויים"); setLoading(false); return; }
+    // Check onboarding
+    const { data: profile } = await supabase.from("profiles").select("onboarding_complete").eq("id", data.user.id).single();
+    if ((profile as any)?.onboarding_complete) window.location.replace("/dashboard");
+    else window.location.replace("/onboarding");
     setLoading(false);
   };
 

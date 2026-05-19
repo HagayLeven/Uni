@@ -1,4 +1,4 @@
-const ROOT_EMAILS = ["hagayas2001@gmail.com"];
+const ROOT_EMAILS = ["hagayas2001@gmail.com", "paz.gutman@gmail.com", "danbenishi@gmail.com"];
 
 export function canAccessSimulator(
   role?: string | null,

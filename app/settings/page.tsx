@@ -14,15 +14,17 @@ import { cn } from "@/lib/utils";
 
 type Section = "profile" | "notifications" | "privacy";
 
-const SECTIONS: { key: Section; icon: React.ElementType; label: string; description: string }[] = [
-  { key: "profile",       icon: User,  label: "פרופיל",        description: "שם תצוגה ותמונה" },
-  { key: "notifications", icon: Bell,  label: "התראות",        description: "מה ומתי לקבל" },
-  { key: "privacy",       icon: Shield, label: "פרטיות ואבטחה", description: "אימייל וסיסמה" },
+const ALL_SECTIONS: { key: Section; icon: React.ElementType; label: string; description: string }[] = [
+  { key: "profile",       icon: User,   label: "פרופיל",          description: "שם תצוגה ותמונה" },
+  { key: "notifications", icon: Bell,   label: "התראות",          description: "מה ומתי לקבל" },
+  { key: "privacy",       icon: Shield, label: "פרטיות ואבטחה",   description: "אימייל וסיסמה" },
 ];
 
 export default function SettingsPage() {
   const router = useRouter();
   const [active, setActive] = useState<Section>("profile");
+
+  const SECTIONS = ALL_SECTIONS;
 
   return (
     <>
@@ -106,11 +108,16 @@ export default function SettingsPage() {
 
 // ─── Profile Section ───────────────────────────────────────────────────────────
 
+const MEDICAL_ROLES = ["פראמדיק", "חובש בכיר", "חובש", "מגיש עזרה ראשונה"];
+
 function ProfileSection() {
-  const [fullName, setFullName]   = useState("");
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [faculty, setFaculty]     = useState("");
-  const [userId, setUserId]       = useState<string | null>(null);
+  const router = useRouter();
+  const [fullName, setFullName]       = useState("");
+  const [avatarUrl, setAvatarUrl]     = useState<string | null>(null);
+  const [faculty, setFaculty]         = useState("");
+  const [medicalRole, setMedicalRole] = useState("");
+  const [birthDate, setBirthDate]     = useState("");
+  const [userId, setUserId]           = useState<string | null>(null);
   const [saving, setSaving]           = useState(false);
   const [uploading, setUploading]     = useState(false);
   const [saved, setSaved]             = useState(false);
@@ -124,13 +131,15 @@ function ProfileSection() {
       setUserId(user.id);
       const { data } = await supabase
         .from("profiles")
-        .select("full_name, avatar_url, faculty")
+        .select("full_name, avatar_url, faculty, medical_role, birth_date")
         .eq("id", user.id)
         .single();
       if (data) {
         setFullName(data.full_name ?? "");
         setAvatarUrl(data.avatar_url ?? null);
         setFaculty(data.faculty ?? "");
+        setMedicalRole((data as any).medical_role ?? "");
+        setBirthDate((data as any).birth_date ?? "");
       }
     }
     load();
@@ -143,7 +152,7 @@ function ProfileSection() {
     const { error } = await supabase
       .from("profiles")
       .upsert(
-        { id: userId, full_name: fullName, faculty },
+        { id: userId, full_name: fullName, faculty, medical_role: medicalRole || null, birth_date: birthDate || null },
         { onConflict: "id" }
       );
     if (error) {
@@ -181,6 +190,8 @@ function ProfileSection() {
     await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", userId);
     setAvatarUrl(publicUrl);
     setUploading(false);
+    // Refresh so sidebar + profile page pick up the new avatar immediately
+    router.refresh();
   };
 
   const initials = fullName ? fullName[0] : "?";
@@ -232,6 +243,16 @@ function ProfileSection() {
         </div>
 
         <div>
+          <label className="block text-xs font-semibold text-gray-400 mb-2">תאריך לידה</label>
+          <input
+            type="date"
+            value={birthDate}
+            onChange={(e) => setBirthDate(e.target.value)}
+            className="w-full h-11 bg-gray-800 border border-gray-700 rounded-xl px-4 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 transition-colors"
+          />
+        </div>
+
+        <div>
           <label className="block text-xs font-semibold text-gray-400 mb-2">קהילה / יחידה</label>
           <select
             value={faculty}
@@ -243,6 +264,18 @@ function ProfileSection() {
             <option value="קהילת פראמדיקים">קהילת פראמדיקים</option>
             <option value="קהילת חובשים">קהילת חובשים</option>
             <option value="קהילת כוננים">קהילת כוננים</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-400 mb-2">תפקיד רפואי</label>
+          <select
+            value={medicalRole}
+            onChange={(e) => setMedicalRole(e.target.value)}
+            className="w-full h-11 bg-gray-800 border border-gray-700 rounded-xl px-4 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 transition-colors"
+          >
+            <option value="">— בחר תפקיד —</option>
+            {MEDICAL_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
 
@@ -472,6 +505,7 @@ function PrivacyRow({ icon: Icon, label, onClick }: { icon: React.ElementType; l
     </button>
   );
 }
+
 
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (

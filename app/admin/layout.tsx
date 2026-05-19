@@ -1,7 +1,9 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 import {
   LayoutDashboard,
   Users,
@@ -34,8 +36,35 @@ const NAV: { href: string; icon: React.ElementType; label: string; badge?: numbe
   { href: "/admin/settings",     icon: Settings,        label: "הגדרות"        },
 ];
 
+const ADMIN_ROLES = ["root", "מנהל מערכת"];
+const ADMIN_EMAIL = "hagayas2001@gmail.com";
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    async function checkAdmin() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/auth/login"); return; }
+      if (user.email === ADMIN_EMAIL) { setAuthorized(true); return; }
+      const { data: profile } = await supabase
+        .from("profiles").select("role").eq("id", user.id).single();
+      if (ADMIN_ROLES.includes((profile as any)?.role ?? "")) {
+        setAuthorized(true);
+      } else {
+        router.replace("/dashboard");
+      }
+    }
+    checkAdmin();
+  }, [router]);
+
+  if (!authorized) return (
+    <div className="flex items-center justify-center h-screen bg-gray-950">
+      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 
   return (
     <div className="flex h-screen bg-gray-950 overflow-hidden" dir="rtl">

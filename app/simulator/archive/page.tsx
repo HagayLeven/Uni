@@ -41,6 +41,7 @@ export default function ArchivePage() {
       .from("exam_archive")
       .select("id,scenario_id,scenario_title,exam_type,score,max_score,pct,passed,candidate_name,group_number,examiner,saved_at")
       .eq("user_id", user.id)
+      .neq("exam_type", "graduation")
       .order("saved_at", { ascending: false });
     setEntries(data ?? []);
     setLoading(false);

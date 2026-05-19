@@ -73,7 +73,7 @@ const EMPTY: FullScenario = {
 function canEdit(role?: string | null, faculty?: string | null, email?: string | null) {
   if (email === "hagayas2001@gmail.com") return true;
   if (faculty === "אדמיניסטרציה") return true;
-  return ["root", "מנהל מערכת"].includes(role ?? "");
+  return ["root", "מנהל מערכת", "מדריך ראשי"].includes(role ?? "");
 }
 
 export default function ScenarioEditorPage() {

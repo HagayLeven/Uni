@@ -74,6 +74,13 @@ function ExamContent() {
   const [timerRunning, setTimerRunning] = useState<boolean>(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Change 1: fail criteria state
+  const [failChecked, setFailChecked] = useState<Record<number, boolean>>({});
+  const instantFailed = Object.values(failChecked).some(Boolean);
+
+  // Change 4: hidden items state
+  const [hiddenItems, setHiddenItems] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     if (!timerRunning) {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -97,6 +104,7 @@ function ExamContent() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const [activeTab, setActiveTab] = useState<"exam" | "edit">("exam");
   const [canEdit, setCanEdit] = useState(false);
+  const [manualOverride, setManualOverride] = useState<"pass" | "fail" | null>(null);
   // Editable scenario fields
   const [editStory, setEditStory] = useState(scenario?.story ?? "");
   const [editVitals, setEditVitals] = useState<Record<string, string>>(
@@ -117,7 +125,7 @@ function ExamContent() {
       }
       const r = (profile as any)?.role;
       const f = (profile as any)?.faculty;
-      const isAdmin = user.email === "hagayas2001@gmail.com" || f === "אדמיניסטרציה" || ["root","מנהל מערכת"].includes(r ?? "");
+      const isAdmin = user.email === "hagayas2001@gmail.com" || f === "אדמיניסטרציה" || ["root","מנהל מערכת","מדריך ראשי"].includes(r ?? "");
       setCanEdit(isAdmin);
       // Load any existing override from DB
       if (isAdmin && scenario) {
@@ -152,7 +160,17 @@ function ExamContent() {
 
   useEffect(() => {
     if (!sessionCode || !scenario) return;
-    const { earned, max } = calcScore(scenario.phases, answers);
+    // Change 3: use updated earned/max that excludes N/A
+    const earned = scenario.phases.reduce((sum, ph) =>
+      sum + ph.actions.reduce((s, a) => {
+        const v = answers[a.id] ?? -1;
+        return s + (v >= 0 ? v : 0);
+      }, 0), 0);
+    const max = scenario.phases.reduce((sum, ph) =>
+      sum + ph.actions.reduce((s, a) => {
+        const v = answers[a.id] ?? -1;
+        return s + (v >= 0 ? (a.maxScore ?? 3) : 0);
+      }, 0), 0);
     const livePct = max === 0 ? 0 : Math.round((earned / max) * 100);
     channelRef.current?.send({
       type: "broadcast",
@@ -170,6 +188,15 @@ function ExamContent() {
     setAnswers((prev) => ({ ...prev, [actionId]: value }));
   }, []);
 
+  const onToggleHide = useCallback((id: string) => {
+    setHiddenItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   if (!scenario) {
     return (
       <div dir="rtl" className="flex h-screen bg-gray-950 items-center justify-center">
@@ -183,10 +210,23 @@ function ExamContent() {
     );
   }
 
-  const [manualOverride, setManualOverride] = useState<"pass" | "fail" | null>(null);
+  // Change 3: earned/max exclude N/A items (value === -1)
+  const earned = scenario.phases.reduce((sum, ph) =>
+    sum + ph.actions.reduce((s, a) => {
+      const v = answers[a.id] ?? -1;
+      return s + (v >= 0 ? v : 0);
+    }, 0), 0);
 
-  const { earned, max, pct } = calcScore(scenario.phases, answers);
-  const passed = manualOverride ? manualOverride === "pass" : pct >= 70;
+  const max = scenario.phases.reduce((sum, ph) =>
+    sum + ph.actions.reduce((s, a) => {
+      const v = answers[a.id] ?? -1;
+      return s + (v >= 0 ? (a.maxScore ?? 3) : 0);
+    }, 0), 0);
+
+  const pct = max === 0 ? 0 : Math.round((earned / max) * 100);
+
+  // Change 1: instantFailed also fails the exam
+  const passed = instantFailed ? false : (manualOverride ? manualOverride === "pass" : pct >= 60);
 
   const missedActions: { phase: string; action: MdaAction }[] = [];
   scenario.phases.forEach((p) => {
@@ -231,7 +271,7 @@ function ExamContent() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("not logged in");
 
-      // Store extra fields inside answers jsonb (started_at, notes)
+      // Store extra fields inside answers jsonb (started_at, notes, fail criteria)
       const { error } = await supabase.from("exam_archive").insert({
         user_id: user.id,
         scenario_id: scenario.code,
@@ -241,6 +281,8 @@ function ExamContent() {
           ...answers,
           _started_at: startTime.toISOString(),
           _notes: notes,
+          _fail_criteria: failChecked,
+          _instant_failed: instantFailed,
         },
         score: earned,
         max_score: max,
@@ -287,6 +329,8 @@ function ExamContent() {
     setAnswers({});
     setSubmitted(false);
     setSaved(false);
+    setFailChecked({});
+    setHiddenItems(new Set());
     const initial: Record<string, boolean> = {};
     scenario.phases.forEach((p) => { initial[p.id] = true; });
     setOpenPhases(initial);
@@ -505,19 +549,35 @@ function ExamContent() {
                     </div>
                   ))}
                 </div>
-                {/* Fail criteria */}
+                {/* Change 1: Fail criteria — interactive checkboxes */}
                 {scenario.failCriteria.length > 0 && (
                   <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
                     <p className="text-xs font-semibold text-red-400 mb-2 flex items-center gap-1.5">
                       <AlertTriangle size={12} /> קריטריוני כשלון אוטומטי
                     </p>
-                    <ul className="space-y-1">
+                    <div className="space-y-2">
                       {scenario.failCriteria.map((fc, i) => (
-                        <li key={i} className="text-xs text-red-300 flex items-start gap-1.5">
-                          <span className="mt-0.5 shrink-0">⚠</span> {fc}
-                        </li>
+                        <button
+                          key={i}
+                          onClick={() => setFailChecked(p => ({ ...p, [i]: !p[i] }))}
+                          className={cn(
+                            "w-full flex items-start gap-3 p-3 rounded-xl border transition-colors text-start",
+                            failChecked[i]
+                              ? "bg-red-500/20 border-red-500/60 animate-pulse"
+                              : "bg-gray-800/50 border-gray-700 hover:border-red-500/30"
+                          )}
+                        >
+                          <span className={cn("w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-colors",
+                            failChecked[i] ? "bg-red-500 border-red-400" : "border-gray-600"
+                          )}>
+                            {failChecked[i] && <span className="text-white text-xs font-bold">✓</span>}
+                          </span>
+                          <span className={cn("text-sm leading-snug", failChecked[i] ? "text-red-300 font-semibold" : "text-gray-400")}>
+                            {fc}
+                          </span>
+                        </button>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 )}
               </div>
@@ -531,6 +591,7 @@ function ExamContent() {
               max={max}
               pct={pct}
               passed={passed}
+              instantFailed={instantFailed}
               manualOverride={manualOverride}
               onOverride={setManualOverride}
               phases={scenario.phases}
@@ -559,6 +620,9 @@ function ExamContent() {
                     mode={mode}
                     open={!!openPhases[phase.id]}
                     onToggle={() => setOpenPhases(p => ({ ...p, [phase.id]: !p[phase.id] }))}
+                    canEdit={canEdit}
+                    hiddenItems={hiddenItems}
+                    onToggleHide={onToggleHide}
                   />
                 ))}
               </div>
@@ -571,7 +635,7 @@ function ExamContent() {
                 </div>
                 <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
                   <div
-                    className={cn("h-full rounded-full transition-all", pct >= 70 ? "bg-green-500" : "bg-red-500")}
+                    className={cn("h-full rounded-full transition-all", pct >= 60 ? "bg-green-500" : "bg-red-500")}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -609,6 +673,14 @@ function ExamContent() {
                 </div>
               </div>
 
+              {/* Change 1: instant fail banner */}
+              {instantFailed && (
+                <div className="mt-4 bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-center">
+                  <p className="text-red-300 font-bold text-lg">❌ כשל אוטומטי — סעיף מוות הופעל</p>
+                  <p className="text-red-400/70 text-sm mt-1">הנבחן/ת נכשל/ה אוטומטית</p>
+                </div>
+              )}
+
               {/* Submit — sticky on mobile */}
               <div className="sticky bottom-4 mt-4">
                 <button
@@ -636,6 +708,9 @@ function PhaseSection({
   mode,
   open,
   onToggle,
+  canEdit,
+  hiddenItems,
+  onToggleHide,
 }: {
   phase: MdaPhase;
   answers: Record<string, number>;
@@ -643,9 +718,21 @@ function PhaseSection({
   mode: "practice" | "exam";
   open: boolean;
   onToggle: () => void;
+  canEdit?: boolean;
+  hiddenItems?: Set<string>;
+  onToggleHide?: (id: string) => void;
 }) {
-  const phaseEarned = phase.actions.reduce((s, a) => s + (answers[a.id] ?? 0), 0);
-  const phaseMax = phase.actions.reduce((s, a) => s + a.maxScore, 0);
+  // Change 3: exclude N/A and hidden items from phase score
+  const phaseEarned = phase.actions.reduce((s, a) => {
+    const hidden = hiddenItems?.has(a.id) ?? false;
+    const v = hidden ? -1 : (answers[a.id] ?? -1);
+    return s + (v >= 0 ? v : 0);
+  }, 0);
+  const phaseMax = phase.actions.reduce((s, a) => {
+    const hidden = hiddenItems?.has(a.id) ?? false;
+    const v = hidden ? -1 : (answers[a.id] ?? -1);
+    return s + (v >= 0 ? (a.maxScore ?? 3) : 0);
+  }, 0);
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -668,6 +755,9 @@ function PhaseSection({
               value={answers[action.id] ?? -1}
               onChange={(v) => setAnswer(action.id, v)}
               mode={mode}
+              canEdit={canEdit}
+              hidden={hiddenItems?.has(action.id) ?? false}
+              onToggleHide={onToggleHide ? () => onToggleHide(action.id) : undefined}
             />
           ))}
         </div>
@@ -676,60 +766,128 @@ function PhaseSection({
   );
 }
 
+// Change 2: score labels
+const SCORE_LABELS: Record<number, string> = {
+  0: "לא בוצע כלל",
+  1: "בוצע חלקית",
+  2: "בוצע טוב",
+  3: "בוצע מעולה",
+};
+
 function ActionRow({
   action,
   value,
   onChange,
   mode,
+  canEdit,
+  hidden,
+  onToggleHide,
 }: {
   action: MdaAction;
   value: number;
   onChange: (v: number) => void;
   mode: "practice" | "exam";
+  canEdit?: boolean;
+  hidden?: boolean;
+  onToggleHide?: () => void;
 }) {
-  const showFeedback = mode === "practice" && value >= 0;
+  const showFeedback = mode === "practice" && value >= 0 && !hidden;
+
+  // If hidden, treat as N/A
+  const displayValue = hidden ? -1 : value;
 
   return (
     <div className={cn(
-      "rounded-xl border p-3 transition-colors",
-      value === 2 ? "border-green-500/40 bg-green-500/10" :
-      value === 1 ? "border-yellow-500/40 bg-yellow-500/10" :
-      value === 0 ? "border-red-500/40 bg-red-500/10" :
-      "border-gray-700 bg-gray-800/50"
+      "rounded-xl border p-3 transition-colors relative",
+      hidden
+        ? "border-gray-700 bg-gray-800/20 opacity-60"
+        : displayValue === 3 ? "border-green-500/40 bg-green-500/10" :
+          displayValue === 2 ? "border-yellow-500/40 bg-yellow-500/10" :
+          displayValue === 1 ? "border-orange-500/40 bg-orange-500/10" :
+          displayValue === 0 ? "border-red-500/40 bg-red-500/10" :
+          "border-gray-700 bg-gray-800/50"
     )}>
-      <p className="text-sm text-gray-200 mb-3 leading-snug">{action.text}</p>
-      {/* Large scoring buttons — critical for exam use */}
-      <div className="flex gap-2">
-        {([0, 1, 2] as const).map((score) => (
-          <button
-            key={score}
-            onClick={() => onChange(score)}
-            className={cn(
-              "flex-1 py-3 rounded-xl text-sm font-bold border transition-all",
-              value === score
-                ? score === 0
-                  ? "bg-red-500 border-red-400 text-white shadow-lg shadow-red-900/40"
-                  : score === 1
-                    ? "bg-yellow-500 border-yellow-400 text-gray-900 shadow-lg shadow-yellow-900/40"
-                    : "bg-green-500 border-green-400 text-white shadow-lg shadow-green-900/40"
-                : score === 0
-                  ? "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20"
-                  : score === 1
-                    ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20"
-                    : "bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
-            )}
-          >
-            {score === 0 ? "✗ 0" : score === 1 ? "~ 1" : "✓ 2"}
-          </button>
-        ))}
-      </div>
-      {showFeedback && value < 2 && (
-        <p className={cn("text-xs mt-2", value === 0 ? "text-red-400" : "text-yellow-400")}>
-          {value === 0 ? "❌ פעולה זו לא בוצעה — חשוב לתרגל!" : "⚠️ בוצע חלקית — שפר את הביצוע"}
+      {/* Change 4: hide/show button + action text in one row */}
+      <div className="flex items-start gap-2 mb-3">
+        <p className={cn("flex-1 text-sm leading-snug", hidden ? "line-through text-gray-500" : "text-gray-200")}>
+          {action.text}
+          {hidden && <span className="mr-2 text-xs text-gray-500 no-underline" style={{ textDecoration: "none" }}>— לא רלוונטי</span>}
         </p>
-      )}
-      {showFeedback && value === 2 && (
-        <p className="text-xs mt-2 text-green-400">✅ מצוין!</p>
+        {canEdit && (
+          <button
+            onClick={onToggleHide}
+            className="shrink-0 text-[10px] px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {hidden ? "הצג" : "הסתר"}
+          </button>
+        )}
+      </div>
+
+      {!hidden && (
+        <>
+          {/* Change 2: scores 0-3 + "ל" N/A button */}
+          <div className="flex gap-1.5">
+            {([0, 1, 2, 3] as const).map((score) => (
+              <button
+                key={score}
+                onClick={() => onChange(score)}
+                className={cn(
+                  "flex-1 py-2 rounded-xl text-sm font-bold border transition-all min-w-0",
+                  value === score
+                    ? score === 0
+                      ? "bg-red-500 border-red-400 text-white shadow-lg shadow-red-900/40"
+                      : score === 1
+                        ? "bg-orange-500 border-orange-400 text-white shadow-lg shadow-orange-900/40"
+                        : score === 2
+                          ? "bg-yellow-500 border-yellow-400 text-gray-900 shadow-lg shadow-yellow-900/40"
+                          : "bg-green-500 border-green-400 text-white shadow-lg shadow-green-900/40"
+                    : score === 0
+                      ? "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20"
+                      : score === 1
+                        ? "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20"
+                        : score === 2
+                          ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20"
+                          : "bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
+                )}
+              >
+                {score}
+              </button>
+            ))}
+            {/* N/A button */}
+            <button
+              onClick={() => onChange(-1)}
+              className={cn(
+                "px-2.5 py-2 rounded-xl text-sm font-bold border transition-all shrink-0",
+                value === -1
+                  ? "bg-gray-600 border-gray-500 text-white"
+                  : "bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700"
+              )}
+            >
+              ל
+            </button>
+          </div>
+          {/* Score label */}
+          {value >= 0 && value <= 3 && (
+            <p className="text-[10px] text-gray-500 mt-1 text-center">{SCORE_LABELS[value]}</p>
+          )}
+          {value === -1 && (
+            <p className="text-[10px] text-gray-500 mt-1 text-center">לא רלוונטי</p>
+          )}
+          {/* Change 2: practice feedback */}
+          {showFeedback && (
+            <p className={cn("text-xs mt-2",
+              value === 3 ? "text-green-400" :
+              value === 2 ? "text-yellow-400" :
+              value === 1 ? "text-orange-400" :
+              "text-red-400"
+            )}>
+              {value === 3 ? "✅ מעולה!" :
+               value === 2 ? "👍 בוצע טוב" :
+               value === 1 ? "⚠️ בוצע חלקית — שפר את הביצוע" :
+               "❌ לא בוצע — חשוב לתרגל!"}
+            </p>
+          )}
+        </>
       )}
     </div>
   );
@@ -737,6 +895,7 @@ function ActionRow({
 
 function ResultsScreen({
   earned, max, pct, passed,
+  instantFailed,
   manualOverride, onOverride,
   phases, answers, missedActions,
   saved, saving, onSave, onReset,
@@ -744,6 +903,7 @@ function ResultsScreen({
   startTime, examiner, notes,
 }: {
   earned: number; max: number; pct: number; passed: boolean;
+  instantFailed: boolean;
   manualOverride: "pass" | "fail" | null;
   onOverride: (v: "pass" | "fail" | null) => void;
   phases: MdaPhase[]; answers: Record<string, number>;
@@ -775,8 +935,11 @@ function ResultsScreen({
         <p className={cn("text-2xl font-bold mb-2", passed ? "text-green-400" : "text-red-400")}>
           {passed ? "עברת את הבחינה! 🎉" : "לא עברת את הבחינה"}
         </p>
+        {instantFailed && (
+          <p className="text-red-300 font-semibold text-sm mb-2">❌ כשל אוטומטי — סעיף מוות הופעל</p>
+        )}
         <p className="text-5xl font-black text-white my-3">{pct}%</p>
-        <p className="text-gray-400 text-sm">{earned} מתוך {max} נקודות | סף מעבר: 70%</p>
+        <p className="text-gray-400 text-sm">{earned} מתוך {max} נקודות | סף מעבר: 60%</p>
       </div>
 
       {/* Examiner pass/fail override */}
@@ -812,7 +975,7 @@ function ResultsScreen({
           </p>
         )}
         {!manualOverride && (
-          <p className="text-xs text-gray-600 mt-2 text-center">ללא סימון — תוצאה אוטומטית ({pct}% / סף 70%)</p>
+          <p className="text-xs text-gray-600 mt-2 text-center">ללא סימון — תוצאה אוטומטית ({pct}% / סף 60%)</p>
         )}
       </div>
 
@@ -860,15 +1023,21 @@ function ResultsScreen({
         <h3 className="text-sm font-semibold text-gray-300 mb-3">פירוט לפי שלב</h3>
         <div className="space-y-2">
           {phases.map((phase) => {
-            const pe = phase.actions.reduce((s, a) => s + (answers[a.id] ?? 0), 0);
-            const pm = phase.actions.reduce((s, a) => s + a.maxScore, 0);
+            const pe = phase.actions.reduce((s, a) => {
+              const v = answers[a.id] ?? -1;
+              return s + (v >= 0 ? v : 0);
+            }, 0);
+            const pm = phase.actions.reduce((s, a) => {
+              const v = answers[a.id] ?? -1;
+              return s + (v >= 0 ? (a.maxScore ?? 3) : 0);
+            }, 0);
             const pp = pm === 0 ? 0 : Math.round((pe / pm) * 100);
             return (
               <div key={phase.id} className="flex items-center gap-3">
                 <span className="text-xs text-gray-400 w-32 truncate shrink-0">{phase.title}</span>
                 <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
                   <div
-                    className={cn("h-full rounded-full", pp >= 70 ? "bg-green-500" : "bg-red-500")}
+                    className={cn("h-full rounded-full", pp >= 60 ? "bg-green-500" : "bg-red-500")}
                     style={{ width: `${pp}%` }}
                   />
                 </div>

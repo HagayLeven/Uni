@@ -5,6 +5,7 @@
 export interface ExamPDFData {
   type: "exam" | "graduation";
   candidateName?: string;
+  candidateId?: string;
   groupNumber?: number;
   scenarioTitle: string;
   scenarioCode?: string;
@@ -20,7 +21,7 @@ export interface ExamPDFData {
   phases?: { title: string; actions: { text: string; score: number }[] }[];
   notes?: { impression: string; strengths: string; improvements: string; recommendation: string };
   // For graduation
-  rubricCategories?: { title: string; items: { text: string; score: number; max: number }[] }[];
+  rubricCategories?: { title: string; items: { text: string; score: number; max: number; timestamp?: string }[] }[];
   failChecked?: string[];
 }
 
@@ -35,17 +36,35 @@ export function generateExamPDF(data: ExamPDFData) {
   const formatTime = (d?: Date) =>
     d ? d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) : "—";
 
-  const rubricRows = data.rubricCategories?.map((cat) => `
+  // Score color helper
+  const scoreColor = (earned: number, max: number) => {
+    if (max === 0) return "#64748b";
+    const r = earned / max;
+    if (r >= 0.66) return "#16a34a";
+    if (r > 0) return "#d97706";
+    return "#dc2626";
+  };
+
+  const rubricRows = data.rubricCategories?.map((cat) => {
+    // Filter out score=-1 (לא רלוונטי) items
+    const relevantItems = cat.items.filter((item) => item.score !== -1);
+    if (relevantItems.length === 0) return "";
+    return `
     <div class="cat-block">
       <h3>${cat.title}</h3>
       <table>
-        ${cat.items.map((item) => `
+        ${relevantItems.map((item) => {
+          // Convert raw score (0-3) to weighted points: round((score/3)*max)
+          const earnedPts = Math.round((item.score / 3) * item.max);
+          return `
           <tr>
-            <td class="item-text">${item.text}</td>
-            <td class="item-score" style="color:${item.score >= item.max * 0.66 ? "#16a34a" : item.score > 0 ? "#d97706" : "#dc2626"}">${item.score}/${item.max}</td>
-          </tr>`).join("")}
+            <td class="item-text">${item.text}${item.timestamp ? `<span class="ts"> ⏱ ${item.timestamp}</span>` : ""}</td>
+            <td class="item-score" style="color:${scoreColor(earnedPts, item.max)}">${earnedPts}/${item.max}</td>
+          </tr>`;
+        }).join("")}
       </table>
-    </div>`).join("") ?? "";
+    </div>`;
+  }).join("") ?? "";
 
   const phasesRows = data.phases?.map((ph) => `
     <div class="cat-block">
@@ -59,11 +78,12 @@ export function generateExamPDF(data: ExamPDFData) {
       </table>
     </div>`).join("") ?? "";
 
+  // Notes section — impression = סיבת כישלון, strengths = הערות בוחן
   const notesSection = data.notes ? `
     <div class="section">
-      <h2>הערות בכתב</h2>
-      ${data.notes.impression   ? `<p><strong>התרשמות כללית:</strong> ${data.notes.impression}</p>` : ""}
-      ${data.notes.strengths    ? `<p><strong>נקודות חוזק:</strong> ${data.notes.strengths}</p>` : ""}
+      <h2>הערות בוחן</h2>
+      ${data.notes.impression   ? `<p><strong>סיבת כישלון:</strong> ${data.notes.impression}</p>` : ""}
+      ${data.notes.strengths    ? `<p><strong>הערות כלליות:</strong> ${data.notes.strengths}</p>` : ""}
       ${data.notes.improvements ? `<p><strong>נקודות לשיפור:</strong> ${data.notes.improvements}</p>` : ""}
       ${data.notes.recommendation ? `<p><strong>המלצת הבוחן:</strong> ${data.notes.recommendation}</p>` : ""}
     </div>` : "";
@@ -94,28 +114,23 @@ export function generateExamPDF(data: ExamPDFData) {
     .result-banner .label { font-size: 18px; font-weight: bold; margin-top: 4px; }
     .section { margin-bottom: 20px; }
     .section h2 { font-size: 15px; color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 10px; }
-    .cat-block { margin-bottom: 14px; }
+    .cat-block { margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid; }
     .cat-block h3 { font-size: 13px; font-weight: bold; background: #f8fafc; padding: 6px 10px; border-right: 3px solid #1e3a8a; margin-bottom: 6px; }
     table { width: 100%; border-collapse: collapse; }
-    tr { border-bottom: 1px solid #f1f5f9; }
+    tr { border-bottom: 1px solid #f1f5f9; page-break-inside: avoid; break-inside: avoid; }
     .item-text { padding: 4px 8px; }
     .item-score { padding: 4px 8px; font-weight: bold; text-align: left; white-space: nowrap; width: 80px; }
-    .fail-box { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+    .ts { font-size: 10px; color: #2563eb; font-family: monospace; margin-right: 6px; }
+    .fail-box { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 12px; margin-bottom: 16px; page-break-inside: avoid; break-inside: avoid; }
     .fail-box ul { padding-right: 20px; margin-top: 6px; }
-    .signature-line { margin-top: 40px; border-top: 1px solid #cbd5e1; padding-top: 16px; display: flex; justify-content: space-between; }
+    .signature-line { margin-top: 40px; border-top: 1px solid #cbd5e1; padding-top: 16px; display: flex; justify-content: space-between; page-break-inside: avoid; break-inside: avoid; }
     .sig-item { text-align: center; width: 30%; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 12px; color: #555; }
     @media print {
       body { padding: 12px 20px; }
-      .cat-block { page-break-inside: avoid; break-inside: avoid; }
-      .section { page-break-inside: avoid; break-inside: avoid; }
       .result-banner { page-break-inside: avoid; break-inside: avoid; }
       .meta-grid { page-break-inside: avoid; break-inside: avoid; }
-      .signature-line { page-break-inside: avoid; break-inside: avoid; margin-top: 20px; }
-      table { page-break-inside: auto; }
-      tr { page-break-inside: avoid; break-inside: avoid; }
+      .signature-line { margin-top: 20px; }
     }
-    .cat-block { page-break-inside: avoid; break-inside: avoid; }
-    tr { page-break-inside: avoid; break-inside: avoid; }
   </style>
 </head>
 <body>
@@ -126,6 +141,7 @@ export function generateExamPDF(data: ExamPDFData) {
 
   <div class="meta-grid">
     <div class="meta-item"><label>נבחן/ת</label><span>${data.candidateName ?? "—"}</span></div>
+    ${data.candidateId ? `<div class="meta-item"><label>ת.ז. נבחן</label><span style="font-family:monospace">${data.candidateId}</span></div>` : ""}
     ${data.groupNumber ? `<div class="meta-item"><label>קבוצה</label><span>קבוצה ${data.groupNumber}</span></div>` : ""}
     <div class="meta-item"><label>בוחן</label><span>${data.examiner || "—"}</span></div>
     <div class="meta-item"><label>שעת התחלה</label><span>${formatTime(data.startTime)}</span></div>

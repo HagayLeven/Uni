@@ -29,6 +29,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "GOOGLE_AI_API_KEY חסר" }, { status: 500 });
   }
 
+  // Auth check: verify the caller's JWT
+  const token = req.headers.get("authorization")?.replace("Bearer ", "");
+  const userSupabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  );
+  const { data: { user } } = await userSupabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   let authorId: string;
   let count: number = 3;
   let topicIndex: number | null = null;
@@ -37,6 +47,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     authorId = body.author_id;
     if (!authorId) throw new Error("author_id חסר");
+    // Validate author_id is a valid UUID
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authorId)) {
+      return NextResponse.json({ error: "author_id לא תקין" }, { status: 400 });
+    }
+    // Ensure author_id matches the authenticated user
+    if (authorId !== user.id) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
     if (body.count) count = Math.min(Number(body.count), 5);
     if (body.topic_index != null) topicIndex = Number(body.topic_index);
   } catch (e: any) {

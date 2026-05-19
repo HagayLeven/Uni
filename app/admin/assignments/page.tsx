@@ -158,7 +158,7 @@ export default function AdminAssignmentsPage() {
                       <input
                         defaultValue={u.faculty ?? ""}
                         onBlur={(e) => save(u.id, "faculty", e.target.value)}
-                        placeholder="יחידה / מחוז"
+                        placeholder="יחידה"
                         className="h-8 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs text-gray-100 focus:outline-none focus:border-indigo-500 max-w-[160px]"
                       />
                       {isSaving(u.id, "faculty") && <Loader2 size={12} className="animate-spin text-indigo-400" />}

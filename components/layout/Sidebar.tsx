@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BookMarked, BookOpen, ChevronDown, ChevronLeft, ChevronRight, ClipboardList,
   Gamepad2, Home, MessageSquare, Plus, Settings, Shield, Sparkles,
-  Trophy, Users, User, Rss, X, Check, LogOut, Stethoscope,
+  Trophy, Users, User, Rss, X, Check, LogOut, Stethoscope, Menu, HelpCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { icon: MessageSquare, label: "הודעות",            href: "/messages", badge: 0 },
   { icon: User,          label: "פרופיל",           href: "/profile"     },
   { icon: Stethoscope,   label: "סימולטור מד״א",    href: "/simulator"   },
+  { icon: HelpCircle,    label: "מרכז עזרה",         href: "/help"        },
   { icon: Settings,      label: "הגדרות",           href: "/settings"    },
 ];
 
@@ -48,6 +49,22 @@ export function Sidebar() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
+
+  // ── Mobile drawer ────────────────────────────────────────────
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [loginStreak, setLoginStreak] = useState(0);
+  const [userXp, setUserXp] = useState(0);
+  const [medicalRole, setMedicalRole] = useState("");
+
+  useEffect(() => {
+    const handler = () => setMobileOpen(v => !v);
+    window.addEventListener("mobile-sidebar-toggle", handler);
+    return () => window.removeEventListener("mobile-sidebar-toggle", handler);
+  }, []);
+
+  // Close on route change
+  const pathname2 = usePathname();
+  useEffect(() => { setMobileOpen(false); }, [pathname2]);
 
   // ── Collapsed state ──────────────────────────────────────────
   const [collapsed, setCollapsed] = useState(() => {
@@ -76,6 +93,22 @@ export function Sidebar() {
       setIsAdmin(user.email === ADMIN_EMAIL);
       setUserEmail(user.email ?? "");
 
+      // 1. Core query — no joins, always succeeds
+      const { data: baseProfile } = await supabase
+        .from("profiles")
+        .select("avatar_url, full_name, role, faculty, course_id")
+        .eq("id", user.id)
+        .single();
+      setAvatarUrl((baseProfile as any)?.avatar_url ?? null);
+      setUserName((baseProfile as any)?.full_name ?? "");
+      if ((baseProfile as any)?.faculty) setFaculty((baseProfile as any).faculty);
+      setCanSimulator(canAccessSimulator(
+        (baseProfile as any)?.role,
+        (baseProfile as any)?.faculty,
+        user.email
+      ));
+
+      // 2. Extended query with courses join (cosmetic — course name display only)
       const { data: profile } = await supabase
         .from("profiles")
         .select("full_name, avatar_url, faculty, course_id, role, courses(name)")
@@ -83,14 +116,26 @@ export function Sidebar() {
         .single();
 
       if (profile) {
-        setUserName(profile.full_name ?? "");
-        setAvatarUrl(profile.avatar_url ?? null);
+        if (profile.full_name) setUserName(profile.full_name);
+        if (profile.avatar_url) setAvatarUrl(profile.avatar_url);
         if (profile.faculty) setFaculty(profile.faculty);
         if ((profile as any).courses?.name) setCourseName((profile as any).courses.name);
-        setCanSimulator(canAccessSimulator((profile as any)?.role, (profile as any)?.faculty, user.email));
-      } else {
-        setCanSimulator(canAccessSimulator(null, null, user.email));
       }
+
+      // Optional columns — won't break if they don't exist yet
+      try {
+        const { data: extras } = await supabase
+          .from("profiles")
+          .select("login_streak, xp_override, bonus_xp, medical_role")
+          .eq("id", user.id)
+          .single();
+        if (extras) {
+          setLoginStreak((extras as any).login_streak ?? 0);
+          setMedicalRole((extras as any).medical_role ?? "");
+          const bonus = (extras as any).bonus_xp ?? 0;
+          setUserXp((extras as any).xp_override != null ? (extras as any).xp_override : bonus);
+        }
+      } catch { /* columns may not exist yet */ }
 
       if (user.email === ADMIN_EMAIL) {
         const { data: courses } = await supabase.from("courses").select("id, name").order("name");
@@ -145,8 +190,134 @@ export function Sidebar() {
 
   const initials = userName ? userName[0] : "?";
 
+  // ── Mobile drawer (portrait + landscape) ─────────────────────────────────
+  const MobileDrawer = () => (
+    <>
+      {/* Backdrop */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+      {/* Drawer panel — wider, richer */}
+      <aside
+        dir="rtl"
+        className={cn(
+          "md:hidden fixed top-0 right-0 z-50 h-full w-[300px] glass-sidebar border-s border-white/5 flex flex-col transition-transform duration-300",
+          mobileOpen ? "translate-x-0" : "translate-x-full"
+        )}
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {/* User hero card */}
+        <div className="px-4 pt-12 pb-4 border-b border-gray-800 bg-gradient-to-b from-gray-800/60 to-transparent">
+          <button onClick={() => setMobileOpen(false)}
+            className="absolute top-4 left-4 p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors">
+            <X size={18} />
+          </button>
+
+          <div className="flex items-center gap-3 mb-3">
+            {/* Avatar */}
+            <Link href="/profile" onClick={() => setMobileOpen(false)}>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="avatar" className="w-14 h-14 rounded-2xl object-cover border-2 border-indigo-500/40 shrink-0" />
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shrink-0">
+                  {initials}
+                </div>
+              )}
+            </Link>
+            <div className="flex-1 min-w-0">
+              <p className="text-base font-bold text-white truncate">{userName || userEmail}</p>
+              {medicalRole && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">
+                  {medicalRole}
+                </span>
+              )}
+              {isAdmin && (
+                <span className="mr-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                  ADMIN
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Streak + XP row */}
+          <div className="flex gap-2">
+            <div className="flex-1 flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl px-3 py-2">
+              <span className="text-lg">🔥</span>
+              <div>
+                <p className="text-xs text-orange-300 font-bold">{loginStreak} ימים</p>
+                <p className="text-[10px] text-gray-500">streak</p>
+              </div>
+            </div>
+            <div className="flex-1 flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-3 py-2">
+              <span className="text-lg">⭐</span>
+              <div>
+                <p className="text-xs text-indigo-300 font-bold">{userXp} XP</p>
+                <p className="text-[10px] text-gray-500">נקודות</p>
+              </div>
+            </div>
+            <Link
+              href="/leaderboard"
+              onClick={() => setMobileOpen(false)}
+              className="flex-1 flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-3 py-2"
+            >
+              <span className="text-lg">🏆</span>
+              <div>
+                <p className="text-xs text-yellow-300 font-bold">הישגים</p>
+                <p className="text-[10px] text-gray-500">לוח</p>
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-0.5">
+          {NAV_ITEMS.map((item) => {
+            if (item.href === "/simulator" && !canSimulator) return null;
+            const active = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link key={item.href} href={item.href}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors active:scale-[0.98]",
+                  active
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-600/20"
+                    : "text-gray-400 active:bg-gray-800"
+                )}>
+                <item.icon size={18} className={active ? "text-indigo-400" : "text-gray-500"} />
+                <span className="flex-1">{item.label}</span>
+                {active && <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
+              </Link>
+            );
+          })}
+
+          {/* Admin shortcut */}
+          {isAdmin && (
+            <Link href="/admin"
+              className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-red-400 active:bg-red-500/10 border border-red-500/20 mt-2 transition-colors">
+              <Shield size={18} /> ניהול מערכת
+            </Link>
+          )}
+        </nav>
+
+        {/* Footer — logout */}
+        <div className="px-3 py-3 border-t border-gray-800">
+          <button
+            onClick={async () => { await supabase.auth.signOut(); window.location.href = "/auth/login"; }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-500 active:bg-red-500/10 active:text-red-400 transition-colors"
+          >
+            <LogOut size={18} />
+            <span>התנתק</span>
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+
   if (collapsed) {
     return (
+      <>
       <aside className="hidden md:flex flex-col w-14 h-full glass-sidebar border-e border-white/5 shrink-0 items-center py-4 gap-3">
         {/* Expand button */}
         <button
@@ -176,10 +347,13 @@ export function Sidebar() {
           {initials}
         </div>
       </aside>
+      <MobileDrawer />
+    </>
     );
   }
 
   return (
+    <>
     <aside className="hidden md:flex flex-col w-[272px] h-full glass-sidebar border-e border-white/5 shrink-0">
 
       {/* Logo */}
@@ -345,8 +519,11 @@ export function Sidebar() {
         <div className="flex items-center gap-3">
           {avatarUrl ? (
             <img src={avatarUrl} alt="avatar"
-              className="w-9 h-9 rounded-full object-cover shrink-0 border border-gray-700" />
-          ) : (
+              className="w-9 h-9 rounded-full object-cover shrink-0 border border-gray-700"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.removeAttribute("style"); }}
+            />
+          ) : null}
+          {!avatarUrl && (
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
               {initials}
             </div>
@@ -376,5 +553,7 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+    <MobileDrawer />
+    </>
   );
 }

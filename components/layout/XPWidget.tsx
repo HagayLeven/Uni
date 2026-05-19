@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Award, Flame, TrendingUp, Zap, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { UniCharacter } from "@/components/uni/UniCharacter";
 import { supabase } from "@/lib/supabase";
 import { getLevel } from "@/lib/xp";
 import { ALL_BADGES, BadgeStats } from "@/lib/badges";
@@ -15,18 +14,58 @@ export function XPWidget() {
   const [rank, setRank]         = useState<number | null>(null);
   const [badgeStats, setBadgeStats] = useState<BadgeStats | null>(null);
   const [loading, setLoading]   = useState(true);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [fullName, setFullName]   = useState("");
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Profile
-      const { data: profile } = await supabase
+      // Avatar + name — absolute minimum, always exists
+      const { data: baseProfile } = await supabase
         .from("profiles")
-        .select("xp_override, bonus_xp, login_streak, longest_streak")
+        .select("avatar_url, full_name")
         .eq("id", user.id)
         .single();
+      setAvatarUrl((baseProfile as any)?.avatar_url ?? null);
+      setFullName((baseProfile as any)?.full_name ?? "");
+
+      // XP columns — might not exist in older DBs
+      let profile: any = null;
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("xp_override, bonus_xp")
+          .eq("id", user.id)
+          .single();
+        profile = data;
+      } catch { /* ignore */ }
+
+      // ── Update login streak (optional columns) ─────────────────────────
+      let newStreak = 0;
+      try {
+        const { data: streakData } = await supabase
+          .from("profiles")
+          .select("login_streak, longest_streak, last_login_date")
+          .eq("id", user.id)
+          .single();
+
+        const today = new Date().toISOString().slice(0, 10);
+        const lastLogin = (streakData as any)?.last_login_date ?? null;
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        newStreak = (streakData as any)?.login_streak ?? 0;
+        let newLongest = (streakData as any)?.longest_streak ?? 0;
+        if (lastLogin !== today) {
+          newStreak = lastLogin === yesterday ? newStreak + 1 : 1;
+          newLongest = Math.max(newLongest, newStreak);
+          await supabase.from("profiles").update({
+            login_streak: newStreak,
+            longest_streak: newLongest,
+            last_login_date: today,
+          }).eq("id", user.id);
+        }
+      } catch { /* columns may not exist yet */ }
 
       // Posts count
       const { count: posts } = await supabase
@@ -50,20 +89,20 @@ export function XPWidget() {
         upvotes = count ?? 0;
       }
 
-      const bonus = profile?.bonus_xp ?? 0;
+      const bonus = (profile as any)?.bonus_xp ?? 0;
       const calculatedXp = profile?.xp_override != null
         ? profile.xp_override
         : (posts ?? 0) * XP_VALUES.post + (comments ?? 0) * XP_VALUES.comment + upvotes * XP_VALUES.upvote + bonus;
 
       setXp(calculatedXp);
-      setStreak(profile?.login_streak ?? 0);
+      setStreak(newStreak);
       setBadgeStats({
         xp: calculatedXp,
         posts: posts ?? 0,
         comments: comments ?? 0,
         upvotes_received: upvotes,
-        login_streak: profile?.login_streak ?? 0,
-        longest_streak: profile?.longest_streak ?? 0,
+        login_streak: newStreak,
+        longest_streak: 0,
       });
 
       // Rank — count users with more XP
@@ -110,7 +149,14 @@ export function XPWidget() {
         </div>
 
         <div className="text-center py-2 flex flex-col items-center gap-2">
-          <UniCharacter pose={xp >= 1000 ? "joyful" : "calm"} size={52} />
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="avatar"
+              className="w-14 h-14 rounded-full object-cover border-2 border-indigo-500/40 shrink-0" />
+          ) : (
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold border-2 border-indigo-500/40 shrink-0">
+              {fullName?.[0] ?? "?"}
+            </div>
+          )}
           <p className="text-3xl font-bold text-white">{xp.toLocaleString("he-IL")}</p>
           <p className="text-xs text-gray-500">רמה {level.level}</p>
         </div>

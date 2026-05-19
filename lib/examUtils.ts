@@ -8,8 +8,11 @@ export function calcScore(
   let max = 0;
   for (const phase of phases) {
     for (const action of phase.actions) {
-      max += action.maxScore;
-      earned += answers[action.id] ?? 0;
+      const v = answers[action.id] ?? -1;
+      if (v >= 0) {
+        max += action.maxScore ?? 3;
+        earned += v;
+      }
     }
   }
   const pct = max === 0 ? 0 : Math.round((earned / max) * 100);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Feed } from "@/components/feed/Feed";
@@ -9,23 +10,26 @@ import { TopBar } from "@/components/layout/TopBar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { OnboardingModal } from "@/components/ui/OnboardingModal";
 export default function DashboardPage() {
+  const router = useRouter();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userId, setUserId]   = useState<string | null>(null);
 
   useEffect(() => {
     async function checkOnboarding() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) { router.replace("/auth/login"); return; }
       setUserId(user.id);
       const { data: profile } = await supabase
         .from("profiles")
-        .select("onboarding_done")
+        .select("onboarding_complete")
         .eq("id", user.id)
         .single();
-      if (!profile?.onboarding_done) setShowOnboarding(true);
+      if (!(profile as any)?.onboarding_complete) {
+        router.replace("/onboarding");
+      }
     }
     checkOnboarding();
-  }, []);
+  }, [router]);
 
   return (
     <>

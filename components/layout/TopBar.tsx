@@ -15,6 +15,9 @@ export function TopBar() {
   const [isAdmin, setIsAdmin]       = useState(false);
   const [xp, setXp]                 = useState(0);
   const [unread, setUnread]         = useState(0);
+  const [avatarUrl, setAvatarUrl]   = useState<string | null>(null);
+  const [initials, setInitials]     = useState("?");
+  const [userEmail, setUserEmail]   = useState("");
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -24,13 +27,14 @@ export function TopBar() {
       if (!user) return;
 
       setIsAdmin(user.email === ADMIN_EMAIL);
+      setUserEmail(user.email ?? "");
 
       // ── Last seen ───────────────────────────────────────────────
       supabase.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", user.id);
 
       // ── XP ──────────────────────────────────────────────────────
       const [{ data: profile }, { count: posts }, { count: comments }] = await Promise.all([
-        supabase.from("profiles").select("xp_override, bonus_xp").eq("id", user.id).single(),
+        supabase.from("profiles").select("xp_override, bonus_xp, avatar_url, full_name").eq("id", user.id).single(),
         supabase.from("posts").select("*", { count: "exact", head: true }).eq("author_id", user.id).eq("is_announcement", false),
         supabase.from("comments").select("*", { count: "exact", head: true }).eq("author_id", user.id),
       ]);
@@ -48,6 +52,9 @@ export function TopBar() {
         ? profile.xp_override
         : (posts ?? 0) * XP_VALUES.post + (comments ?? 0) * XP_VALUES.comment + upvotes * XP_VALUES.upvote + bonus;
       setXp(calculatedXp);
+      setAvatarUrl((profile as any)?.avatar_url ?? null);
+      const name = (profile as any)?.full_name ?? "";
+      setInitials(name ? name[0] : (user.email?.[0]?.toUpperCase() ?? "?"));
 
       // ── Unread notifications ─────────────────────────────────────
       const { count: unreadCount } = await supabase

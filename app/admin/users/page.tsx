@@ -40,11 +40,13 @@ const ROLE_PERMISSIONS: Record<string, { key: string; label: string; description
     { key: "manage_exams", label: "ניהול מבחנים", description: "יצירה ועריכה של מבחנים" },
     { key: "export_data", label: "ייצוא נתונים", description: "ייצוא נתוני ארכיון וציונים" },
     { key: "graduation_exam", label: "גישה לבחינת בגרות", description: "הרשאה לניהול בחינת הבגרות 20/05" },
+    { key: "supervisor_access", label: "👁 מפקח לייב", description: "צפייה בבחינות בזמן אמת (לשונית מפקח + מסך צפייה)" },
   ],
   "מדריך": [
     { key: "manage_attendance", label: "ניהול נוכחות", description: "רישום ועריכת נוכחות" },
     { key: "view_analytics", label: "אנליטיקס", description: "גישה לדשבורד ונתוני ביצועים" },
     { key: "graduation_exam", label: "גישה לבחינת בגרות", description: "הרשאה לניהול בחינת הבגרות 20/05" },
+    { key: "supervisor_access", label: "👁 מפקח לייב", description: "צפייה בבחינות בזמן אמת (לשונית מפקח + מסך צפייה)" },
   ],
 };
 

@@ -39,8 +39,13 @@ function AIExamInner() {
   const [userId, setUserId]         = useState<string | null>(null);
   const [editingQ, setEditingQ]     = useState<number | null>(null);
 
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => setUserId(user?.id ?? null));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id ?? null);
+      setAccessToken(session?.access_token ?? null);
+    });
   }, []);
 
   const generate = async () => {
@@ -53,7 +58,10 @@ function AIExamInner() {
     try {
       const res = await fetch("/api/generate-exam", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({ topic: t, context: context.trim() || undefined, count }),
       });
       const data = await res.json();

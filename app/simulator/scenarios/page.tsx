@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 function canEdit(role?: string | null, faculty?: string | null, email?: string | null) {
   if (email === "hagayas2001@gmail.com") return true;
   if (faculty === "אדמיניסטרציה") return true;
-  return ["root", "מנהל מערכת"].includes(role ?? "");
+  return ["root", "מנהל מערכת", "מדריך ראשי"].includes(role ?? "");
 }
 
 export default function ScenariosListPage() {
@@ -31,7 +31,7 @@ export default function ScenariosListPage() {
         router.replace("/simulator");
         return;
       }
-      const { data } = await supabase.from("mda_scenarios").select("id, code, title, category, badge").order("code");
+      const { data } = await supabase.from("mda_scenarios").select("id, code, title, category, badge").eq("graduation_only", false).order("code");
       setDbScenarios((data ?? []) as any);
       setLoading(false);
     }

@@ -12,6 +12,7 @@ interface Profile {
   full_name: string;
   avatar_url: string | null;
   faculty: string | null;
+  medical_role: string | null;
 }
 
 export default function ProfilePage() {
@@ -27,7 +28,7 @@ export default function ProfilePage() {
 
       const { data: prof } = await supabase
         .from("profiles")
-        .select("full_name, avatar_url, faculty")
+        .select("full_name, avatar_url, faculty, medical_role")
         .eq("id", user.id)
         .single();
       if (prof) setProfile(prof);
@@ -84,7 +85,16 @@ export default function ProfilePage() {
               )}
               <div className="flex-1 min-w-0">
                 <h1 className="text-xl font-bold text-white truncate">{profile?.full_name ?? "טוען..."}</h1>
-                <p className="text-sm text-gray-400 mt-0.5">{profile?.faculty ?? "פראמדיק"}</p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {profile?.medical_role && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-300">
+                      {profile.medical_role}
+                    </span>
+                  )}
+                  {profile?.faculty && (
+                    <span className="text-sm text-gray-400">{profile.faculty}</span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1.5 mt-2">
                   <Zap size={13} className="text-yellow-400" />
                   <span className="text-xs text-yellow-400 font-semibold">0 XP</span>

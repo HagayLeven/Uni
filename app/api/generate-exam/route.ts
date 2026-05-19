@@ -1,11 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@supabase/supabase-js";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
+  // Auth check
+  const authHeader = req.headers.get("authorization");
+  const token = authHeader?.replace("Bearer ", "");
+  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  );
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const { topic, context, count = 10, language = "he" } = await req.json();
+    // Sanitize context to prevent prompt injection
+    const safeContext = typeof context === "string" ? context.slice(0, 4000) : "";
 
     if (!topic) {
       return NextResponse.json({ error: "topic required" }, { status: 400 });
@@ -13,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     const prompt = `אתה מומחה בהוראת רפואת חירום וחובשות. צור ${count} שאלות בחירה מרובה (multiple choice) בעברית על הנושא: "${topic}".
 
-${context ? `תוכן נוסף לפי המצגת:\n${context}\n` : ""}
+${safeContext ? `תוכן נוסף לפי המצגת:\n${safeContext}\n` : ""}
 
 דרישות:
 - כל שאלה עם 4 אפשרויות (א, ב, ג, ד)
