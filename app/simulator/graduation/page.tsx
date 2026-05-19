@@ -1525,9 +1525,20 @@ export default function GraduationPage() {
                               <p className="text-xs font-semibold text-gray-400 mb-1.5">{CAT_LABELS[cat] ?? cat}</p>
                               <div className="flex flex-wrap gap-1.5">
                                 {grouped[cat].map(s => (
-                                  <span key={s.id} className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg text-gray-300">
-                                    <span className="font-mono text-gray-500 ml-1">{s.code}</span>{s.title}
-                                  </span>
+                                  <div key={s.id} className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded-lg pl-1 pr-2 py-1">
+                                    <span className="text-xs text-gray-300">
+                                      <span className="font-mono text-gray-500 ml-1">{s.code}</span>{s.title}
+                                    </span>
+                                    {isEditorUser && (
+                                      <a
+                                        href={`/simulator/scenarios/${s.id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[10px] text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 mr-1 transition-colors"
+                                        title="ערוך תרחיש"
+                                      >✏️</a>
+                                    )}
+                                  </div>
                                 ))}
                               </div>
                             </div>

@@ -110,6 +110,22 @@ export default function ScenarioEditorPage() {
       setLoading(true);
       const { data: dbRow } = await supabase.from("mda_scenarios").select("*").eq("id", idParam).maybeSingle();
       if (dbRow) {
+        // Normalize phases — support both formats:
+        // New format: { id, title, actions: [{id, text, maxScore}] }
+        // Legacy SQL format: { name, steps: [{num, action, expected}] }
+        const normalizePhases = (rawPhases: any[]): ScenarioPhase[] =>
+          (rawPhases ?? []).map((p: any) => {
+            const title = p.title ?? p.name ?? "שלב";
+            const actions: ScenarioAction[] = p.actions
+              ? p.actions.map((a: any) => ({ id: a.id ?? uid(), text: a.text ?? "", maxScore: a.maxScore ?? 2 }))
+              : (p.steps ?? []).map((s: any) => ({
+                  id: uid(),
+                  text: [s.action, s.expected].filter(Boolean).join(" — "),
+                  maxScore: 2,
+                }));
+            return { id: p.id ?? uid(), title, actions };
+          });
+
         setScenario({
           id:           dbRow.id ?? "",
           code:         dbRow.code ?? dbRow.id ?? "",
@@ -119,10 +135,7 @@ export default function ScenarioEditorPage() {
           story:        dbRow.story ?? "",
           vitals:       (dbRow.vitals as Record<string, string>) ?? {},
           vitals_post:  (dbRow.vitals_post as Record<string, string>) ?? {},
-          phases:       ((dbRow.phases as ScenarioPhase[]) ?? []).map((p) => ({
-            ...p,
-            actions: (p.actions ?? []).map((a) => ({ ...a, maxScore: a.maxScore ?? 2 })),
-          })),
+          phases:       normalizePhases(dbRow.phases as any[]),
           rubric:       (dbRow.rubric as RubricItem[]) ?? [],
           fail_criteria:(dbRow.fail_criteria as string[]) ?? [],
           impression:   (dbRow.impression as string[]) ?? [],
