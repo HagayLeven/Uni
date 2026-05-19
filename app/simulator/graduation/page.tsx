@@ -1317,27 +1317,39 @@ export default function GraduationPage() {
                           <div key={idx} className="flex items-start gap-3">
                             <p className="flex-1 text-sm text-gray-300 print:text-black leading-snug">{item}</p>
                             <div className="flex gap-1.5 shrink-0 print:hidden">
-                              {([0, 1, 2, 3] as ScoreVal[]).map((v) => (
-                                <button
-                                  key={v}
-                                  onClick={() => setScore(cat.id, idx, v)}
-                                  className={cn(
-                                    "w-9 h-9 rounded-lg text-sm font-bold border transition-colors",
-                                    getScore(cat.id, idx) === v
-                                      ? v === 0
-                                        ? "bg-red-500/60 border-red-400 text-white"
-                                        : v === 1
-                                          ? "bg-yellow-500/60 border-yellow-400 text-white"
-                                          : v === 2
-                                            ? "bg-blue-500/60 border-blue-400 text-white"
-                                            : "bg-green-500/60 border-green-400 text-white"
-                                      : "bg-gray-700 border-gray-600 text-gray-400 hover:border-gray-500"
-                                  )}
-                                >
-                                  {v}
-                                </button>
-                              ))}
+                              {([3, 2, 1, 0] as ScoreVal[]).map((v) => {
+                                const LABELS = ["לא בוצע","לא בוצע טוב","בוצע חלקי","בוצע היטב"];
+                                const active = getScore(cat.id, idx) === v;
+                                return (
+                                  <button
+                                    key={v}
+                                    onClick={() => setScore(cat.id, idx, v)}
+                                    title={LABELS[v]}
+                                    className={cn(
+                                      "w-9 h-9 rounded-lg text-sm font-bold border transition-colors",
+                                      active
+                                        ? v === 0 ? "bg-red-500 border-red-400 text-white"
+                                          : v === 1 ? "bg-orange-500 border-orange-400 text-white"
+                                          : v === 2 ? "bg-yellow-500 border-yellow-400 text-gray-900"
+                                          : "bg-green-500 border-green-400 text-white"
+                                        : "bg-gray-700 border-gray-600 text-gray-400 hover:border-gray-500"
+                                    )}
+                                  >
+                                    {v}
+                                  </button>
+                                );
+                              })}
                             </div>
+                            {/* Score legend — small, below buttons */}
+                            {getScore(cat.id, idx) > 0 && (
+                              <span className={cn(
+                                "text-[10px] font-medium shrink-0 print:hidden",
+                                getScore(cat.id, idx) === 3 ? "text-green-400" :
+                                getScore(cat.id, idx) === 2 ? "text-yellow-400" : "text-orange-400"
+                              )}>
+                                {["","לא בוצע טוב","בוצע חלקי","בוצע היטב"][getScore(cat.id, idx)]}
+                              </span>
+                            )}
                             {/* Print: show selected score */}
                             <span className="hidden print:flex w-8 h-8 rounded border border-gray-400 text-xs font-bold items-center justify-center shrink-0">
                               {getScore(cat.id, idx)}
