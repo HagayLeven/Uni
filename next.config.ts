@@ -9,8 +9,8 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   // Supabase REST + Realtime WebSocket + Google OAuth avatar
   `connect-src 'self' https://${SUPABASE_HOST} wss://${SUPABASE_HOST} https://*.supabase.co wss://*.supabase.co https://accounts.google.com`,
-  // Images: self, data URIs, S3, Google avatars
-  "img-src 'self' data: blob: https://*.amazonaws.com https://lh3.googleusercontent.com",
+  // Images: self, data URIs, S3, Google avatars, Supabase Storage
+  `img-src 'self' data: blob: https://*.amazonaws.com https://lh3.googleusercontent.com https://${SUPABASE_HOST} https://*.supabase.co`,
   // Fonts: self only
   "font-src 'self'",
   // No plugins
