@@ -197,58 +197,9 @@ export default function GraduationPage() {
     }
   };
 
-  // Show password gate if not unlocked
-  if (!unlocked) {
-    return (
-      <div dir="rtl" className="flex h-screen bg-gray-950 overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 flex items-center justify-center px-4">
-          <div className="w-full max-w-sm">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center mx-auto mb-4">
-                <Lock size={28} className="text-amber-400" />
-              </div>
-              <h1 className="text-xl font-bold text-white">בחינת בגרות 20/05/26</h1>
-              <p className="text-sm text-gray-400 mt-1">הזן סיסמת גישה לבחינה</p>
-            </div>
-            <div className="space-y-3">
-              <div className="relative">
-                <input
-                  type={showPass ? "text" : "password"}
-                  value={passInput}
-                  onChange={(e) => setPassInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
-                  placeholder="סיסמה..."
-                  className="w-full h-12 bg-gray-800 border border-gray-700 rounded-xl px-4 pe-11 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
-                />
-                <button onClick={() => setShowPass(v => !v)} className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-500 hover:text-gray-300">
-                  {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              {passError && <p className="text-xs text-red-400 text-center">{passError}</p>}
-              <button
-                onClick={handleUnlock}
-                disabled={passChecking || !passInput.trim()}
-                className="w-full h-12 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                {passChecking ? <Loader2 size={18} className="animate-spin" /> : <Lock size={16} />}
-                כניסה
-              </button>
-              {isAdmin && (
-                <button onClick={() => { sessionStorage.setItem(PASS_STORAGE_KEY, "1"); setUnlocked(true); }} className="w-full text-xs text-gray-500 hover:text-gray-300 py-2 transition-colors">
-                  כניסת מנהל (ללא סיסמה) →
-                </button>
-              )}
-            </div>
-          </div>
-        </main>
-        <BottomNav />
-      </div>
-    );
-  }
-
+  // ── All state must be declared before any conditional return ─────────────
   // Main page tab
-  const [pageTab, setPageTab] = useState<"exam" | "tracking" | "assign" | "editscenario">("exam");
+  const [pageTab, setPageTab] = useState<"exam" | "tracking" | "assign" | "editscenario" | "archive" | "bank">("exam");
   // Scenario editing
   const [editScenarioCode, setEditScenarioCode] = useState("");
   const [editScenarioTitle, setEditScenarioTitle] = useState("");
@@ -259,6 +210,21 @@ export default function GraduationPage() {
   const [editScenarioError, setEditScenarioError] = useState("");
   const [savedScenarios, setSavedScenarios] = useState<{id: string; title: string; code: string}[]>([]);
 
+  // ── Archive tab ───────────────────────────────────────────────────────────
+  type ArchiveRow = { id: string; candidate_name: string; group_number: number; scenario_title: string; scenario_id: string; pct: number; passed: boolean; examiner: string; saved_at: string; score: number; max_score: number; manual_override?: string };
+  const [archiveRows, setArchiveRows] = useState<ArchiveRow[]>([]);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveFilter, setArchiveFilter] = useState("");
+
+  // ── Scenario bank tab ─────────────────────────────────────────────────────
+  // Pre-assignment: all candidates × scenario. Stored in candidate_scenarios.
+  // bank state = map of candidateName → {title, code}
+  type BankEntry = { candidateName: string; groupId: number; title: string; code: string; saved: boolean; saving: boolean };
+  const [bank, setBank] = useState<BankEntry[]>(() =>
+    GROUPS.flatMap(g => g.candidates.map(c => ({ candidateName: c, groupId: g.id, title: "", code: "", saved: false, saving: false })))
+  );
+  const [bankDbLoaded, setBankDbLoaded] = useState(false);
+
   useEffect(() => {
     if (pageTab === "editscenario") {
       supabase.from("mda_scenarios").select("id, title, story, vitals, code").then(({ data }) => {
@@ -266,6 +232,62 @@ export default function GraduationPage() {
       });
     }
   }, [pageTab]);
+
+  useEffect(() => {
+    if (pageTab === "archive") {
+      setArchiveLoading(true);
+      supabase.from("exam_archive")
+        .select("id, candidate_name, group_number, scenario_title, scenario_id, pct, passed, examiner, saved_at, score, max_score, rubric_data")
+        .eq("exam_type", "graduation")
+        .order("saved_at", { ascending: false })
+        .then(({ data }) => {
+          setArchiveRows((data ?? []) as ArchiveRow[]);
+          setArchiveLoading(false);
+        });
+    }
+  }, [pageTab]);
+
+  useEffect(() => {
+    if (pageTab === "bank" && !bankDbLoaded) {
+      supabase.from("candidate_scenarios").select("*").order("group_number").then(({ data }) => {
+        if (data && data.length > 0) {
+          setBank(prev => prev.map(entry => {
+            const row = (data as any[]).find(d => d.candidate_name === entry.candidateName);
+            if (row) return { ...entry, title: row.scenario_title ?? "", code: row.scenario_code ?? "" };
+            return entry;
+          }));
+        }
+        setBankDbLoaded(true);
+      });
+    }
+  }, [pageTab, bankDbLoaded]);
+
+  const saveBankEntry = async (candidateName: string) => {
+    setBank(prev => prev.map(e => e.candidateName === candidateName ? { ...e, saving: true } : e));
+    const entry = bank.find(e => e.candidateName === candidateName);
+    if (!entry) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    // Upsert by candidate_name
+    const existing = await supabase.from("candidate_scenarios").select("id").eq("candidate_name", candidateName).maybeSingle();
+    if (existing.data?.id) {
+      await supabase.from("candidate_scenarios").update({
+        scenario_title: entry.title,
+        scenario_code: entry.code || null,
+        group_number: entry.groupId,
+      }).eq("id", existing.data.id);
+    } else {
+      await supabase.from("candidate_scenarios").insert({
+        candidate_name: candidateName,
+        group_number: entry.groupId,
+        scenario_title: entry.title,
+        scenario_code: entry.code || null,
+        done: false,
+        created_by: user?.id,
+      });
+    }
+    setBank(prev => prev.map(e => e.candidateName === candidateName ? { ...e, saving: false, saved: true } : e));
+    setTimeout(() => setBank(prev => prev.map(e => e.candidateName === candidateName ? { ...e, saved: false } : e)), 2000);
+  };
 
   const handleEditScenarioSave = async () => {
     if (!editScenarioTitle.trim()) return;
@@ -532,6 +554,56 @@ export default function GraduationPage() {
     }
   };
 
+  // ── Password gate — conditional render (hooks-safe) ──────────────────────
+  if (!unlocked) {
+    return (
+      <div dir="rtl" className="flex h-screen bg-gray-950 overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center px-4">
+          <div className="w-full max-w-sm">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center mx-auto mb-4">
+                <Lock size={28} className="text-amber-400" />
+              </div>
+              <h1 className="text-xl font-bold text-white">בחינת בגרות 20/05/26</h1>
+              <p className="text-sm text-gray-400 mt-1">הזן סיסמת גישה לבחינה</p>
+            </div>
+            <div className="space-y-3">
+              <div className="relative">
+                <input
+                  type={showPass ? "text" : "password"}
+                  value={passInput}
+                  onChange={(e) => setPassInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
+                  placeholder="סיסמה..."
+                  className="w-full h-12 bg-gray-800 border border-gray-700 rounded-xl px-4 pe-11 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <button onClick={() => setShowPass(v => !v)} className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-500 hover:text-gray-300">
+                  {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {passError && <p className="text-xs text-red-400 text-center">{passError}</p>}
+              <button
+                onClick={handleUnlock}
+                disabled={passChecking || !passInput.trim()}
+                className="w-full h-12 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                {passChecking ? <Loader2 size={18} className="animate-spin" /> : <Lock size={16} />}
+                כניסה
+              </button>
+              {isAdmin && (
+                <button onClick={() => { sessionStorage.setItem(PASS_STORAGE_KEY, "1"); setUnlocked(true); }} className="w-full text-xs text-gray-500 hover:text-gray-300 py-2 transition-colors">
+                  כניסת מנהל (ללא סיסמה) →
+                </button>
+              )}
+            </div>
+          </div>
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
+
   return (
     <div dir="rtl" className="flex h-screen bg-gray-950 overflow-hidden overflow-x-hidden">
       <Sidebar />
@@ -585,9 +657,11 @@ export default function GraduationPage() {
           {/* Page tabs */}
           <div className="flex gap-1 mb-5 bg-gray-900 border border-gray-800 rounded-xl p-1 print:hidden overflow-x-auto">
             <button onClick={() => setPageTab("exam")} className={cn("flex-1 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap px-2", pageTab === "exam" ? "bg-amber-600 text-white" : "text-gray-400 hover:text-gray-200")}>🎓 בחינה</button>
+            <button onClick={() => setPageTab("bank")} className={cn("flex-1 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap px-2", pageTab === "bank" ? "bg-teal-600 text-white" : "text-gray-400 hover:text-gray-200")}>📚 מאגר</button>
             <button onClick={() => setPageTab("tracking")} className={cn("flex-1 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap px-2", pageTab === "tracking" ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-gray-200")}>📋 מעקב</button>
+            <button onClick={() => setPageTab("archive")} className={cn("flex-1 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap px-2", pageTab === "archive" ? "bg-purple-600 text-white" : "text-gray-400 hover:text-gray-200")}>🗂 ארכיון</button>
             {isAdmin && <button onClick={() => setPageTab("assign")} className={cn("flex-1 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap px-2", pageTab === "assign" ? "bg-green-600 text-white" : "text-gray-400 hover:text-gray-200")}>⚙️ שיוך</button>}
-            {isAdmin && <button onClick={() => setPageTab("editscenario" as any)} className={cn("flex-1 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap px-2", pageTab === ("editscenario" as any) ? "bg-orange-600 text-white" : "text-gray-400 hover:text-gray-200")}>✏️ עריכת תרחיש</button>}
+            {isAdmin && <button onClick={() => setPageTab("editscenario")} className={cn("flex-1 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap px-2", pageTab === "editscenario" ? "bg-orange-600 text-white" : "text-gray-400 hover:text-gray-200")}>✏️ עריכה</button>}
           </div>
 
           {/* EDIT SCENARIO TAB */}
@@ -659,6 +733,138 @@ export default function GraduationPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ── BANK TAB — pre-assign scenarios ── */}
+          {pageTab === "bank" && (
+            <div className="print:hidden space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-white">מאגר תרחישים</p>
+                  <p className="text-xs text-gray-500 mt-0.5">הגדר מראש איזה תרחיש כל נבחן יבצע</p>
+                </div>
+              </div>
+              {!bankDbLoaded ? (
+                <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-teal-400" /></div>
+              ) : (
+                GROUPS.map(g => (
+                  <div key={g.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                    <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center gap-2">
+                      <span className="text-xs font-bold text-teal-400">קבוצה {g.id}</span>
+                      <span className="text-xs text-gray-500">({g.candidates.length} נבחנים)</span>
+                    </div>
+                    <div className="divide-y divide-gray-800">
+                      {g.candidates.map(cand => {
+                        const entry = bank.find(e => e.candidateName === cand)!;
+                        return (
+                          <div key={cand} className="px-3 py-2.5 flex items-center gap-2">
+                            <span className="text-sm text-gray-200 w-36 shrink-0 truncate">{cand}</span>
+                            <input
+                              value={entry.title}
+                              onChange={e => setBank(prev => prev.map(b => b.candidateName === cand ? { ...b, title: e.target.value, saved: false } : b))}
+                              placeholder="שם תרחיש..."
+                              className="flex-1 h-8 bg-gray-800 border border-gray-700 rounded-lg px-2.5 text-xs text-white focus:outline-none focus:border-teal-500 transition-colors"
+                            />
+                            <input
+                              value={entry.code}
+                              onChange={e => setBank(prev => prev.map(b => b.candidateName === cand ? { ...b, code: e.target.value, saved: false } : b))}
+                              placeholder="קוד"
+                              className="w-16 h-8 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs font-mono text-gray-400 focus:outline-none focus:border-teal-500 transition-colors"
+                            />
+                            {isAdmin && (
+                              <button
+                                onClick={() => saveBankEntry(cand)}
+                                disabled={entry.saving || !entry.title.trim()}
+                                className={cn(
+                                  "h-8 px-3 rounded-lg text-xs font-semibold transition-colors shrink-0",
+                                  entry.saved ? "bg-green-600 text-white" : "bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white"
+                                )}
+                              >
+                                {entry.saving ? <Loader2 size={11} className="animate-spin" /> : entry.saved ? "✓" : "שמור"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* ── ARCHIVE TAB ── */}
+          {pageTab === "archive" && (
+            <div className="print:hidden space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  value={archiveFilter}
+                  onChange={e => setArchiveFilter(e.target.value)}
+                  placeholder="חפש לפי שם נבחן..."
+                  className="flex-1 h-10 bg-gray-800 border border-gray-700 rounded-xl px-4 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
+                />
+                {archiveRows.length > 0 && (
+                  <span className="text-xs text-gray-500 shrink-0">{archiveRows.length} בחינות</span>
+                )}
+              </div>
+
+              {archiveLoading ? (
+                <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-purple-400" /></div>
+              ) : archiveRows.length === 0 ? (
+                <p className="text-center text-gray-500 text-sm py-10">אין בחינות בארכיון עדיין</p>
+              ) : (() => {
+                const filtered = archiveRows.filter(r =>
+                  !archiveFilter || (r.candidate_name ?? "").includes(archiveFilter)
+                );
+                // Group by candidate
+                const byCandidate = filtered.reduce((acc, row) => {
+                  const key = row.candidate_name ?? "לא ידוע";
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(row);
+                  return acc;
+                }, {} as Record<string, ArchiveRow[]>);
+
+                return (
+                  <div className="space-y-3">
+                    {Object.entries(byCandidate).map(([candName, rows]) => (
+                      <div key={candName} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                        <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+                          <span className="text-sm font-semibold text-white">{candName}</span>
+                          <span className="text-xs text-gray-500">
+                            {rows.filter(r => r.passed).length}/{rows.length} עברו
+                          </span>
+                        </div>
+                        <div className="divide-y divide-gray-800/60">
+                          {rows.map(row => (
+                            <div key={row.id} className="px-4 py-3 flex items-center gap-3 flex-wrap">
+                              <span className={cn(
+                                "text-xs font-bold px-2 py-0.5 rounded-full border shrink-0",
+                                row.passed
+                                  ? "bg-green-500/20 text-green-400 border-green-500/30"
+                                  : "bg-red-500/20 text-red-400 border-red-500/30"
+                              )}>
+                                {row.passed ? "עבר" : "נכשל"}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-gray-200 truncate">{row.scenario_title || row.scenario_id || "—"}</p>
+                                <p className="text-xs text-gray-500">
+                                  {row.pct}% ({row.score}/{row.max_score})
+                                  {row.examiner ? ` · בוחן: ${row.examiner}` : ""}
+                                  {row.group_number ? ` · ק׳${row.group_number}` : ""}
+                                </p>
+                              </div>
+                              <span className="text-xs text-gray-600 shrink-0">
+                                {row.saved_at ? new Date(row.saved_at).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
