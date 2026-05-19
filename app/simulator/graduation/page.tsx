@@ -1169,6 +1169,29 @@ export default function GraduationPage() {
                           setEditVitals((data.vitals as Record<string, string>) || {});
                           setEditPhasesJson(JSON.stringify(data.phases || [], null, 2));
                           setEditPhasesError("");
+                          // Load THIS scenario's phases into the live rubric editor
+                          if (data.phases && Array.isArray(data.phases) && data.phases.length > 0) {
+                            const rubric = (data.phases as any[]).map((ph: any) => {
+                              const steps = ph.steps ?? ph.actions ?? [];
+                              return {
+                                id: ph.id ?? ph.name ?? String(Math.random()),
+                                title: ph.name ?? ph.title ?? "שלב",
+                                items: steps.map((s: any) => ({
+                                  text: s.action ?? s.text ?? "",
+                                  maxScore: s.maxScore ?? 3,
+                                  expected: s.expected ?? null,
+                                })),
+                              };
+                            });
+                            setLiveRubric(rubric);
+                          } else {
+                            setLiveRubric([]);
+                          }
+                          if (data.fail_criteria && Array.isArray(data.fail_criteria)) {
+                            setLiveFailCriteria(data.fail_criteria as string[]);
+                          } else {
+                            setLiveFailCriteria([]);
+                          }
                         }
                       }} className="flex-1 text-right px-3 py-2 text-sm flex items-center gap-2">
                         <span className="text-xs font-mono text-gray-500">{s.code}</span>
