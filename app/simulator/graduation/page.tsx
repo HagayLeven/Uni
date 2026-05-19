@@ -217,13 +217,14 @@ export default function GraduationPage() {
   const [archiveFilter, setArchiveFilter] = useState("");
 
   // ── Scenario bank tab ─────────────────────────────────────────────────────
-  // Pre-assignment: all candidates × scenario. Stored in candidate_scenarios.
-  // bank state = map of candidateName → {title, code}
-  type BankEntry = { candidateName: string; groupId: number; title: string; code: string; saved: boolean; saving: boolean };
+  type ScenarioSlot = { code: string; title: string };
+  type BankEntry = { candidateName: string; groupId: number; slots: ScenarioSlot[]; saved: boolean; saving: boolean };
+  const EMPTY_SLOTS: ScenarioSlot[] = [{code:"",title:""},{code:"",title:""},{code:"",title:""},{code:"",title:""}];
   const [bank, setBank] = useState<BankEntry[]>(() =>
-    GROUPS.flatMap(g => g.candidates.map(c => ({ candidateName: c, groupId: g.id, title: "", code: "", saved: false, saving: false })))
+    GROUPS.flatMap(g => g.candidates.map(c => ({ candidateName: c, groupId: g.id, slots: EMPTY_SLOTS.map(s=>({...s})), saved: false, saving: false })))
   );
   const [bankDbLoaded, setBankDbLoaded] = useState(false);
+  const [bankScenarios, setBankScenarios] = useState<{id: string; code: string; title: string; badge: string}[]>([]);
 
   useEffect(() => {
     if (pageTab === "editscenario") {
@@ -249,16 +250,33 @@ export default function GraduationPage() {
 
   useEffect(() => {
     if (pageTab === "bank" && !bankDbLoaded) {
-      supabase.from("candidate_scenarios").select("*").order("group_number").then(({ data }) => {
-        if (data && data.length > 0) {
+      // Load available scenarios + existing assignments in parallel
+      Promise.all([
+        supabase.from("mda_scenarios").select("id, code, title, badge").order("code"),
+        supabase.from("candidate_scenarios").select("*").order("group_number"),
+      ]).then(([scenRes, assignRes]) => {
+        if (scenRes.data) {
+          setBankScenarios(scenRes.data.map((d: any) => ({
+            id: d.id, code: d.code || d.id, title: d.title || d.id, badge: d.badge || "🚑",
+          })));
+        }
+        if (assignRes.data && assignRes.data.length > 0) {
           setBank(prev => prev.map(entry => {
-            const row = (data as any[]).find(d => d.candidate_name === entry.candidateName);
-            if (row) return { ...entry, title: row.scenario_title ?? "", code: row.scenario_code ?? "" };
+            const row = (assignRes.data as any[]).find(d => d.candidate_name === entry.candidateName);
+            if (row) {
+              // Load from scenarios_json if available, else fallback to single scenario
+              const loaded: ScenarioSlot[] = Array.isArray(row.scenarios_json) && row.scenarios_json.length > 0
+                ? row.scenarios_json
+                : [{ code: row.scenario_code ?? "", title: row.scenario_title ?? "" }, {code:"",title:""},{code:"",title:""},{code:"",title:""}];
+              // Pad to 4 slots
+              while (loaded.length < 4) loaded.push({code:"",title:""});
+              return { ...entry, slots: loaded.slice(0, 4) };
+            }
             return entry;
           }));
         }
         setBankDbLoaded(true);
-      });
+      }).catch(() => setBankDbLoaded(true));
     }
   }, [pageTab, bankDbLoaded]);
 
@@ -267,20 +285,23 @@ export default function GraduationPage() {
     const entry = bank.find(e => e.candidateName === candidateName);
     if (!entry) return;
     const { data: { user } } = await supabase.auth.getUser();
-    // Upsert by candidate_name
+    const filledSlots = entry.slots.filter(s => s.title.trim());
+    const firstSlot = filledSlots[0] ?? { code: "", title: "" };
     const existing = await supabase.from("candidate_scenarios").select("id").eq("candidate_name", candidateName).maybeSingle();
     if (existing.data?.id) {
       await supabase.from("candidate_scenarios").update({
-        scenario_title: entry.title,
-        scenario_code: entry.code || null,
+        scenario_title: firstSlot.title,
+        scenario_code: firstSlot.code || null,
+        scenarios_json: entry.slots,
         group_number: entry.groupId,
       }).eq("id", existing.data.id);
     } else {
       await supabase.from("candidate_scenarios").insert({
         candidate_name: candidateName,
         group_number: entry.groupId,
-        scenario_title: entry.title,
-        scenario_code: entry.code || null,
+        scenario_title: firstSlot.title,
+        scenario_code: firstSlot.code || null,
+        scenarios_json: entry.slots,
         done: false,
         created_by: user?.id,
       });
@@ -739,57 +760,103 @@ export default function GraduationPage() {
           {/* ── BANK TAB — pre-assign scenarios ── */}
           {pageTab === "bank" && (
             <div className="print:hidden space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white">מאגר תרחישים</p>
-                  <p className="text-xs text-gray-500 mt-0.5">הגדר מראש איזה תרחיש כל נבחן יבצע</p>
-                </div>
+              <div>
+                <p className="text-sm font-semibold text-white">מאגר תרחישים</p>
+                <p className="text-xs text-gray-500 mt-0.5">שייך תרחיש לכל נבחן מראש — יוצג אוטומטית בשלב 3 של הבחינה</p>
               </div>
+
               {!bankDbLoaded ? (
                 <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-teal-400" /></div>
               ) : (
-                GROUPS.map(g => (
-                  <div key={g.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                    <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center gap-2">
-                      <span className="text-xs font-bold text-teal-400">קבוצה {g.id}</span>
-                      <span className="text-xs text-gray-500">({g.candidates.length} נבחנים)</span>
+                <>
+                  {/* Scenario catalog */}
+                  {bankScenarios.length > 0 && (
+                    <div className="bg-gray-900 border border-teal-500/20 rounded-xl p-3">
+                      <p className="text-xs font-semibold text-teal-400 mb-2">📚 תרחישים זמינים ({bankScenarios.length})</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {bankScenarios.map(s => (
+                          <span key={s.id} className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg text-gray-300 font-mono">
+                            {s.badge} {s.code} — {s.title}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    <div className="divide-y divide-gray-800">
-                      {g.candidates.map(cand => {
-                        const entry = bank.find(e => e.candidateName === cand)!;
-                        return (
-                          <div key={cand} className="px-3 py-2.5 flex items-center gap-2">
-                            <span className="text-sm text-gray-200 w-36 shrink-0 truncate">{cand}</span>
-                            <input
-                              value={entry.title}
-                              onChange={e => setBank(prev => prev.map(b => b.candidateName === cand ? { ...b, title: e.target.value, saved: false } : b))}
-                              placeholder="שם תרחיש..."
-                              className="flex-1 h-8 bg-gray-800 border border-gray-700 rounded-lg px-2.5 text-xs text-white focus:outline-none focus:border-teal-500 transition-colors"
-                            />
-                            <input
-                              value={entry.code}
-                              onChange={e => setBank(prev => prev.map(b => b.candidateName === cand ? { ...b, code: e.target.value, saved: false } : b))}
-                              placeholder="קוד"
-                              className="w-16 h-8 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs font-mono text-gray-400 focus:outline-none focus:border-teal-500 transition-colors"
-                            />
-                            {isAdmin && (
-                              <button
-                                onClick={() => saveBankEntry(cand)}
-                                disabled={entry.saving || !entry.title.trim()}
-                                className={cn(
-                                  "h-8 px-3 rounded-lg text-xs font-semibold transition-colors shrink-0",
-                                  entry.saved ? "bg-green-600 text-white" : "bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white"
+                  )}
+
+                  {bankScenarios.length === 0 && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">
+                      אין תרחישים ב-DB עדיין — הוסף תרחישים דרך טאב ״עריכה״ או ייבא ב-SQL
+                    </div>
+                  )}
+
+                  {/* Per-candidate assignment */}
+                  {GROUPS.map(g => (
+                    <div key={g.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                      <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center gap-2">
+                        <span className="text-xs font-bold text-teal-400">קבוצה {g.id}</span>
+                        <span className="text-xs text-gray-500">({g.candidates.length} נבחנים)</span>
+                      </div>
+                      <div className="divide-y divide-gray-800">
+                        {g.candidates.map(cand => {
+                          const entry = bank.find(e => e.candidateName === cand)!;
+                          return (
+                            <div key={cand} className="px-3 py-3 border-b border-gray-800 last:border-0">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-gray-200">{cand}</span>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => saveBankEntry(cand)}
+                                    disabled={entry.saving || !entry.slots.some(s => s.title.trim())}
+                                    className={cn(
+                                      "h-7 px-3 rounded-lg text-xs font-semibold transition-colors",
+                                      entry.saved ? "bg-green-600 text-white" : "bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white"
+                                    )}
+                                  >
+                                    {entry.saving ? <Loader2 size={11} className="animate-spin" /> : entry.saved ? "✓ נשמר" : "שמור"}
+                                  </button>
                                 )}
-                              >
-                                {entry.saving ? <Loader2 size={11} className="animate-spin" /> : entry.saved ? "✓" : "שמור"}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
+                              </div>
+                              <div className="space-y-1.5">
+                                {entry.slots.map((slot, idx) => (
+                                  <div key={idx} className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-600 w-4 text-center shrink-0">{idx + 1}</span>
+                                    <select
+                                      value={slot.code}
+                                      onChange={e => {
+                                        const sel = bankScenarios.find(s => s.code === e.target.value);
+                                        setBank(prev => prev.map(b => {
+                                          if (b.candidateName !== cand) return b;
+                                          const newSlots = b.slots.map((s, i) => i === idx ? { code: e.target.value, title: sel?.title ?? "" } : s);
+                                          return { ...b, slots: newSlots, saved: false };
+                                        }));
+                                      }}
+                                      className="flex-1 h-7 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs text-white focus:outline-none focus:border-teal-500 transition-colors"
+                                    >
+                                      <option value="">— תרחיש {idx + 1} —</option>
+                                      {bankScenarios.map(s => (
+                                        <option key={s.id} value={s.code}>{s.badge} {s.code} — {s.title}</option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      value={slot.title}
+                                      onChange={e => setBank(prev => prev.map(b => {
+                                        if (b.candidateName !== cand) return b;
+                                        const newSlots = b.slots.map((s, i) => i === idx ? { ...s, title: e.target.value } : s);
+                                        return { ...b, slots: newSlots, saved: false };
+                                      }))}
+                                      placeholder="שם ידני..."
+                                      className="w-28 h-7 bg-gray-800 border border-gray-700 rounded-lg px-2 text-xs text-gray-400 focus:outline-none focus:border-teal-500 transition-colors"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </>
               )}
             </div>
           )}
