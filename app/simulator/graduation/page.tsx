@@ -224,7 +224,10 @@ export default function GraduationPage() {
     GROUPS.flatMap(g => g.candidates.map(c => ({ candidateName: c, groupId: g.id, slots: EMPTY_SLOTS.map(s=>({...s})), saved: false, saving: false })))
   );
   const [bankDbLoaded, setBankDbLoaded] = useState(false);
-  const [bankScenarios, setBankScenarios] = useState<{id: string; code: string; title: string; badge: string}[]>([]);
+  const [bankScenarios, setBankScenarios] = useState<{id: string; code: string; title: string; badge: string; category: string}[]>([]);
+
+  // ── Assigned scenarios for current candidate (step 3) ────────────────────
+  const [assignedForCandidate, setAssignedForCandidate] = useState<ScenarioSlot[]>([]);
 
   useEffect(() => {
     if (pageTab === "editscenario") {
@@ -257,7 +260,7 @@ export default function GraduationPage() {
       ]).then(([scenRes, assignRes]) => {
         if (scenRes.data) {
           setBankScenarios(scenRes.data.map((d: any) => ({
-            id: d.id, code: d.code || d.id, title: d.title || d.id, badge: d.badge || "🚑",
+            id: d.id, code: d.code || d.id, title: d.title || d.id, badge: d.badge || "🚑", category: d.category || "cardiac",
           })));
         }
         if (assignRes.data && assignRes.data.length > 0) {
@@ -401,6 +404,24 @@ export default function GraduationPage() {
   const [candidate, setCandidate] = useState<string>("");
   const [scenarioCode, setScenarioCode] = useState<string>("");
   const [scenarioTitle, setScenarioTitle] = useState<string>("");
+
+  // Load assigned scenarios when candidate selected (step 3)
+  useEffect(() => {
+    if (step === 3 && candidate) {
+      setAssignedForCandidate([]);
+      supabase.from("candidate_scenarios")
+        .select("scenarios_json, scenario_title, scenario_code")
+        .eq("candidate_name", candidate)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (!data) return;
+          const slots: ScenarioSlot[] = Array.isArray(data.scenarios_json) && data.scenarios_json.length > 0
+            ? (data.scenarios_json as ScenarioSlot[]).filter((s: ScenarioSlot) => s.title?.trim())
+            : data.scenario_title ? [{ code: data.scenario_code ?? "", title: data.scenario_title }] : [];
+          setAssignedForCandidate(slots);
+        });
+    }
+  }, [step, candidate]);
 
   // Rubric scores: rubricCategoryId.itemIndex → 0-3
   const [scores, setScores] = useState<Record<string, ScoreVal>>({});
@@ -769,19 +790,47 @@ export default function GraduationPage() {
                 <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-teal-400" /></div>
               ) : (
                 <>
-                  {/* Scenario catalog */}
-                  {bankScenarios.length > 0 && (
-                    <div className="bg-gray-900 border border-teal-500/20 rounded-xl p-3">
-                      <p className="text-xs font-semibold text-teal-400 mb-2">📚 תרחישים זמינים ({bankScenarios.length})</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {bankScenarios.map(s => (
-                          <span key={s.id} className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg text-gray-300 font-mono">
-                            {s.badge} {s.code} — {s.title}
-                          </span>
-                        ))}
+                  {/* Scenario catalog by category */}
+                  {bankScenarios.length > 0 && (() => {
+                    const CAT_LABELS: Record<string, string> = {
+                      cardiac: "❤️ קרדיו",
+                      respiratory: "🌬️ נשימתי",
+                      trauma: "🚗 טראומה",
+                      pediatric: "👶 פדיאטריה",
+                      neuro: "🧠 נוירולוגיה",
+                      obstetric: "🤰 מיילדות",
+                      toxicology: "☠️ הרעלות",
+                    };
+                    const PRIORITY = ["cardiac","respiratory","trauma","pediatric","neuro","obstetric","toxicology"];
+                    const grouped = bankScenarios.reduce((acc, s) => {
+                      const cat = s.category || "cardiac";
+                      if (!acc[cat]) acc[cat] = [];
+                      acc[cat].push(s);
+                      return acc;
+                    }, {} as Record<string, typeof bankScenarios>);
+                    const cats = [...PRIORITY.filter(c => grouped[c]), ...Object.keys(grouped).filter(c => !PRIORITY.includes(c))];
+                    return (
+                      <div className="bg-gray-900 border border-teal-500/20 rounded-xl overflow-hidden">
+                        <div className="px-4 py-2 bg-gray-800 border-b border-teal-500/20">
+                          <p className="text-xs font-semibold text-teal-400">📚 תרחישים זמינים ({bankScenarios.length})</p>
+                        </div>
+                        <div className="p-3 space-y-3">
+                          {cats.map(cat => (
+                            <div key={cat}>
+                              <p className="text-xs font-semibold text-gray-400 mb-1.5">{CAT_LABELS[cat] ?? cat}</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {grouped[cat].map(s => (
+                                  <span key={s.id} className="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg text-gray-300">
+                                    <span className="font-mono text-gray-500 ml-1">{s.code}</span>{s.title}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {bankScenarios.length === 0 && (
                     <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">
@@ -1090,20 +1139,44 @@ export default function GraduationPage() {
             </div>
           )}
 
-          {/* STEP 3: Manual scenario entry */}
+          {/* STEP 3: Scenario selection */}
           {step === 3 && (
             <div>
-              <button
-                onClick={() => setStep(2)}
-                className="text-sm text-gray-500 hover:text-gray-300 mb-4 flex items-center gap-1 min-h-[44px]"
-              >
+              <button onClick={() => setStep(2)} className="text-sm text-gray-500 hover:text-gray-300 mb-4 flex items-center gap-1 min-h-[44px]">
                 <ArrowRight size={14} /> חזרה לנבחנים
               </button>
-              <h2 className="text-lg font-semibold text-white mb-1">
-                שלב 3: הגדרת תרחיש עבור {candidate}
-              </h2>
-              <p className="text-xs text-gray-500 mb-5">התרחישים יוגדרו ע״י המנחה לפני הבחינה</p>
-              <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-white mb-1">שלב 3: תרחיש עבור {candidate}</h2>
+
+              {/* Assigned scenarios from bank */}
+              {assignedForCandidate.length > 0 && (
+                <div className="mb-5">
+                  <p className="text-xs font-semibold text-teal-400 mb-2">📚 תרחישים משויכים מהמאגר — בחר אחד:</p>
+                  <div className="space-y-2">
+                    {assignedForCandidate.map((slot, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => { setScenarioTitle(slot.title); setScenarioCode(slot.code ?? ""); }}
+                        className={cn(
+                          "w-full text-start px-4 py-3 rounded-xl border transition-colors",
+                          scenarioTitle === slot.title
+                            ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
+                            : "bg-gray-900 border-gray-700 hover:border-amber-500/40 text-gray-200"
+                        )}
+                      >
+                        <span className="text-xs font-mono text-gray-500 ml-2">{slot.code}</span>
+                        {slot.title}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-600 mt-3 mb-1">או הזן ידנית:</p>
+                </div>
+              )}
+
+              {assignedForCandidate.length === 0 && (
+                <p className="text-xs text-gray-500 mb-4">לא שויכו תרחישים מראש — הזן ידנית:</p>
+              )}
+
+              <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-400 mb-1">שם התרחיש <span className="text-red-400">*</span></label>
                   <input
