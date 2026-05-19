@@ -530,11 +530,17 @@ export default function GraduationPage() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkSaved, setBulkSaved] = useState(false);
 
+  const [trackingArchive, setTrackingArchive] = useState<{candidate_name: string; scenario_title: string; scenario_id: string | null; passed: boolean}[]>([]);
+
   useEffect(() => {
     if (pageTab === "tracking" || pageTab === "assign") {
       setLoadingTracking(true);
-      supabase.from("candidate_scenarios").select("*").order("group_number").then(({ data }) => {
-        setCandidateScenarios((data as CandidateScenario[]) ?? []);
+      Promise.all([
+        supabase.from("candidate_scenarios").select("*").order("group_number"),
+        supabase.from("exam_archive").select("candidate_name, scenario_title, scenario_id, passed").order("saved_at", { ascending: false }),
+      ]).then(([{ data: scenData }, { data: archData }]) => {
+        setCandidateScenarios((scenData as CandidateScenario[]) ?? []);
+        setTrackingArchive((archData ?? []) as any);
         setLoadingTracking(false);
       });
     }
@@ -1709,53 +1715,97 @@ export default function GraduationPage() {
               {loadingTracking ? <p className="text-gray-500 text-sm">טוען...</p> : candidateScenarios.length === 0 ? (
                 <p className="text-gray-500 text-sm text-center py-8">עדיין לא שויכו תרחישים</p>
               ) : (
-                <div className="space-y-3">
-                  {Array.from(new Set(candidateScenarios.map(r => r.group_number))).sort().map(gNum => (
-                    <div key={gNum} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                      <div className="px-4 py-2 bg-gray-800 border-b border-gray-700">
-                        <span className="text-xs font-bold text-amber-400">קבוצה {gNum}</span>
+                <div className="space-y-4">
+                  {Array.from(new Set(candidateScenarios.map(r => r.group_number))).sort().map(gNum => {
+                    const groupRows = candidateScenarios.filter(r => r.group_number === gNum);
+                    // Count completed scenarios in this group
+                    const totalSlots = groupRows.reduce((acc, row) => {
+                      const slots: ScenarioSlot[] = Array.isArray((row as any).scenarios_json) && (row as any).scenarios_json.length > 0
+                        ? (row as any).scenarios_json.filter((s: ScenarioSlot) => s.title?.trim())
+                        : row.scenario_title ? [{ code: row.scenario_code, title: row.scenario_title }] : [];
+                      return acc + slots.length;
+                    }, 0);
+                    const doneSlots = groupRows.reduce((acc, row) => {
+                      const slots: ScenarioSlot[] = Array.isArray((row as any).scenarios_json) && (row as any).scenarios_json.length > 0
+                        ? (row as any).scenarios_json.filter((s: ScenarioSlot) => s.title?.trim())
+                        : row.scenario_title ? [{ code: row.scenario_code, title: row.scenario_title }] : [];
+                      return acc + slots.filter(s =>
+                        trackingArchive.some(a => a.candidate_name === row.candidate_name && (a.scenario_id === s.code || a.scenario_title === s.title))
+                      ).length;
+                    }, 0);
+                    return (
+                      <div key={gNum} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                        <div className="px-4 py-2.5 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+                          <span className="text-xs font-bold text-amber-400">קבוצה {gNum}</span>
+                          <span className="text-[10px] text-gray-500">{doneSlots}/{totalSlots} תרחישים הושלמו</span>
+                        </div>
+                        <div className="divide-y divide-gray-800">
+                          {groupRows.map(row => {
+                            const slots: ScenarioSlot[] = Array.isArray((row as any).scenarios_json) && (row as any).scenarios_json.length > 0
+                              ? (row as any).scenarios_json.filter((s: ScenarioSlot) => s.title?.trim())
+                              : row.scenario_title ? [{ code: row.scenario_code, title: row.scenario_title }] : [];
+                            const allDone = slots.length > 0 && slots.every(s =>
+                              trackingArchive.some(a => a.candidate_name === row.candidate_name && (a.scenario_id === s.code || a.scenario_title === s.title))
+                            );
+                            return (
+                              <div key={row.id} className="px-4 py-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className={cn("text-sm font-semibold", allDone ? "text-green-400" : "text-gray-200")}>
+                                    {allDone && <span className="ml-1">✓</span>}{row.candidate_name}
+                                  </span>
+                                  <button
+                                    onClick={() => { if (confirm(`למחוק את כל השיוכים של ${row.candidate_name}?`)) deleteAssignment(row.id); }}
+                                    className="w-6 h-6 rounded text-red-500/30 hover:text-red-400 hover:bg-red-500/10 transition-all flex items-center justify-center"
+                                    title="מחק שיוך"
+                                  >
+                                    <Trash2 size={11} />
+                                  </button>
+                                </div>
+                                {slots.length === 0 ? (
+                                  <p className="text-xs text-gray-600 italic">אין תרחישים משויכים</p>
+                                ) : (
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    {slots.map((s, i) => {
+                                      const archEntry = trackingArchive.find(a =>
+                                        a.candidate_name === row.candidate_name && (a.scenario_id === s.code || a.scenario_title === s.title)
+                                      );
+                                      const isDone = !!archEntry;
+                                      return (
+                                        <div key={i} className={cn(
+                                          "rounded-lg px-2.5 py-1.5 text-[11px] flex items-start gap-1.5 border",
+                                          isDone
+                                            ? "bg-green-900/30 border-green-700/50 text-green-300"
+                                            : "bg-gray-800/60 border-gray-700/50 text-gray-400"
+                                        )}>
+                                          <span className="mt-0.5 shrink-0">{isDone ? "✓" : `${i + 1}.`}</span>
+                                          <div className="min-w-0">
+                                            {s.code && <span className="font-mono text-[9px] text-gray-500 block">{s.code}</span>}
+                                            <span className="leading-tight">{s.title}</span>
+                                            {isDone && archEntry?.passed !== undefined && (
+                                              <span className={cn("block text-[9px] mt-0.5", archEntry.passed ? "text-green-500" : "text-red-400")}>
+                                                {archEntry.passed ? "עבר" : "נכשל"}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    {/* Empty slots placeholder */}
+                                    {Array.from({ length: Math.max(0, 4 - slots.length) }).map((_, i) => (
+                                      <div key={`empty-${i}`} className="rounded-lg px-2.5 py-1.5 text-[11px] border border-dashed border-gray-800 text-gray-700 flex items-center gap-1.5">
+                                        <span>{slots.length + i + 1}.</span>
+                                        <span>לא שויך</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-gray-800 text-xs text-gray-500">
-                            <th className="text-right px-4 py-2 font-medium">חניך</th>
-                            <th className="text-right px-4 py-2 font-medium">תרחיש</th>
-                            <th className="text-center px-4 py-2 font-medium">בוצע</th>
-                            <th className="px-2 py-2"></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {candidateScenarios.filter(r => r.group_number === gNum).map(row => (
-                            <tr key={row.id} className="border-b border-gray-800/50 last:border-0">
-                              <td className="px-4 py-3 text-gray-200 font-medium">{row.candidate_name}</td>
-                              <td className="px-4 py-3 text-gray-400">
-                                <span className="font-mono text-xs text-gray-500 ml-1">{row.scenario_code}</span>
-                                {row.scenario_title}
-                                {row.done && row.done_by && <span className="block text-[10px] text-gray-600">ע״י {row.done_by}</span>}
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <button
-                                  onClick={() => toggleDone(row)}
-                                  className={cn("w-8 h-8 rounded-full border-2 font-bold text-sm transition-all", row.done ? "bg-green-500 border-green-400 text-white" : "border-gray-600 text-gray-600 hover:border-green-500 hover:text-green-500")}
-                                >
-                                  {row.done ? "✓" : "○"}
-                                </button>
-                              </td>
-                              <td className="px-2 py-3 text-center">
-                                <button
-                                  onClick={() => { if (confirm(`למחוק את השיוך של ${row.candidate_name}?`)) deleteAssignment(row.id); }}
-                                  className="w-7 h-7 rounded-lg text-red-500/40 hover:text-red-400 hover:bg-red-500/10 transition-all flex items-center justify-center"
-                                  title="מחק שיוך"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
