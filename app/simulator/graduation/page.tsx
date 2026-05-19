@@ -469,12 +469,6 @@ export default function GraduationPage() {
 
   const handleEditScenarioSave = async () => {
     if (!editScenarioTitle.trim()) return;
-    // Validate phases JSON
-    let parsedPhases = [];
-    if (editPhasesJson.trim()) {
-      try { parsedPhases = JSON.parse(editPhasesJson); }
-      catch { setEditPhasesError("JSON לא תקין — בדוק שוב"); return; }
-    }
     setEditPhasesError("");
     setEditScenarioSaving(true);
     setEditScenarioError("");
@@ -482,26 +476,31 @@ export default function GraduationPage() {
       const { data: { user } } = await supabase.auth.getUser();
       // Keep original DB id when editing existing; generate new id only for new scenarios
       const id = editScenarioId ?? (editScenarioCode.trim() || editScenarioTitle.trim().replace(/\s+/g, "_").slice(0, 30));
+      // Convert liveRubric (visual editor) back to phases format for DB
+      const phases = liveRubric.map(cat => ({
+        id: cat.id,
+        name: cat.title,
+        steps: cat.items.map((item, i) => ({
+          num: i + 1,
+          action: item.text,
+          expected: item.expected ?? "",
+          maxScore: item.maxScore,
+        })),
+      }));
       const { error } = await supabase.from("mda_scenarios").upsert({
         id,
         code: editScenarioCode.trim() || id,
         title: editScenarioTitle.trim(),
         story: editStory,
         vitals: editVitals,
-        phases: parsedPhases,
+        phases,
+        fail_criteria: liveFailCriteria,
         graduation_only: true,
         category: "graduation",
         updated_at: new Date().toISOString(),
         updated_by: user?.id,
       }, { onConflict: "id" });
       if (error) throw error;
-      // Also save rubric + fail criteria to graduation_config
-      await supabase.from("graduation_config").upsert({
-        id: "default",
-        rubric: liveRubric,
-        fail_criteria: liveFailCriteria,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "id" });
       setEditScenarioSaved(true);
       setSavedScenarios(prev => {
         const exists = prev.find(s => s.id === id);
