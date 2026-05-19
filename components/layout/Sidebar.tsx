@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BookMarked, BookOpen, ChevronDown, ChevronLeft, ClipboardList,
+  BookMarked, BookOpen, ChevronDown, ChevronLeft, ChevronRight, ClipboardList,
   Gamepad2, Home, MessageSquare, Plus, Settings, Shield, Sparkles,
   Trophy, Users, User, Rss, X, Check, LogOut, Stethoscope,
 } from "lucide-react";
@@ -48,6 +48,18 @@ export function Sidebar() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
+
+  // ── Collapsed state ──────────────────────────────────────────
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("sidebar_collapsed") === "1";
+    return false;
+  });
+  const toggleCollapsed = () => {
+    setCollapsed(v => {
+      localStorage.setItem("sidebar_collapsed", v ? "0" : "1");
+      return !v;
+    });
+  };
 
   // ── Add channel form ─────────────────────────────────────────
   const [adding, setAdding] = useState(false);
@@ -133,11 +145,45 @@ export function Sidebar() {
 
   const initials = userName ? userName[0] : "?";
 
+  if (collapsed) {
+    return (
+      <aside className="hidden md:flex flex-col w-14 h-full glass-sidebar border-e border-white/5 shrink-0 items-center py-4 gap-3">
+        {/* Expand button */}
+        <button
+          onClick={toggleCollapsed}
+          className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-white transition-colors mb-1"
+          title="הרחב סרגל"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        {/* Icon-only nav */}
+        {NAV_ITEMS.map((item) => {
+          if (item.href === "/simulator" && !canSimulator) return null;
+          const active = pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href} title={item.label}
+              className={cn(
+                "w-9 h-9 rounded-lg flex items-center justify-center transition-colors",
+                active ? "bg-indigo-600/30 text-indigo-300" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800"
+              )}>
+              <item.icon size={17} />
+            </Link>
+          );
+        })}
+        <div className="flex-1" />
+        {/* Avatar */}
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+          {initials}
+        </div>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="flex flex-col w-[272px] h-full glass-sidebar border-e border-white/5 shrink-0">
+    <aside className="hidden md:flex flex-col w-[272px] h-full glass-sidebar border-e border-white/5 shrink-0">
 
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-800">
+      <div className="flex items-center gap-3 px-4 py-5 border-b border-gray-800">
         <div className={cn(
           "flex items-center justify-center w-9 h-9 rounded-lg shrink-0",
           isAdmin
@@ -146,19 +192,27 @@ export function Sidebar() {
         )}>
           <BookOpen size={18} className="text-white" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <span className="font-bold text-white text-base leading-none">Uni</span>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 truncate">
               {courseName ?? faculty ?? "Uni"}
             </p>
             {isAdmin && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gradient-to-r from-orange-500 to-red-500 text-white leading-none animate-pulse">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gradient-to-r from-orange-500 to-red-500 text-white leading-none animate-pulse shrink-0">
                 ADMIN
               </span>
             )}
           </div>
         </div>
+        {/* Collapse button */}
+        <button
+          onClick={toggleCollapsed}
+          className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-gray-800 transition-colors shrink-0"
+          title="מזער סרגל"
+        >
+          <ChevronRight size={15} />
+        </button>
       </div>
 
       {/* Scrollable nav */}
