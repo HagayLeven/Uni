@@ -258,7 +258,10 @@ export default function ScenarioEditorPage() {
     setSaving(true); setError("");
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const id = scenario.code.trim() || scenario.title.trim().replace(/\s+/g, "_").slice(0, 20);
+      // For existing scenarios keep the original DB id; only compute for new ones
+      const id = isNew
+        ? (scenario.code.trim() || scenario.title.trim().replace(/\s+/g, "_").slice(0, 20))
+        : idParam;
       const { error: err } = await supabase.from("mda_scenarios").upsert({
         id,
         code:          scenario.code.trim() || id,
@@ -328,6 +331,19 @@ export default function ScenarioEditorPage() {
               </h1>
               <p className="text-xs text-gray-500">עורך תרחיש מלא — שינויים משפיעים על כלל המשתמשים</p>
             </div>
+            {!isNew && (
+              <button
+                onClick={async () => {
+                  if (!confirm(`למחוק את התרחיש "${scenario.title}"? לא ניתן לשחזר.`)) return;
+                  await supabase.from("mda_scenarios").delete().eq("id", idParam);
+                  router.replace("/simulator/scenarios");
+                }}
+                className="p-2.5 rounded-xl border border-red-500/30 text-red-500/60 hover:text-red-400 hover:border-red-500/60 transition-colors shrink-0"
+                title="מחק תרחיש"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
             <button
               onClick={handleSave}
               disabled={saving}

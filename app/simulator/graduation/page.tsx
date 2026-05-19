@@ -23,7 +23,7 @@ const GROUPS: { id: number; candidates: string[] }[] = [
 ];
 
 // ── Rubric definition ─────────────────────────────────────────────────────
-interface RubricItem { text: string; maxScore: number; }
+interface RubricItem { text: string; maxScore: number; expected?: string | null; }
 interface RubricCategory {
   id: string;
   title: string;
@@ -271,6 +271,7 @@ export default function GraduationPage() {
   // Main page tab
   const [pageTab, setPageTab] = useState<"exam" | "tracking" | "assign" | "editscenario" | "archive" | "bank" | "config" | "supervisor" | "grades">("exam");
   // Scenario editing
+  const [editScenarioId, setEditScenarioId] = useState<string | null>(null); // DB id of the scenario being edited
   const [editScenarioCode, setEditScenarioCode] = useState("");
   const [editScenarioTitle, setEditScenarioTitle] = useState("");
   const [editStory, setEditStory] = useState("");
@@ -479,7 +480,8 @@ export default function GraduationPage() {
     setEditScenarioError("");
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const id = editScenarioCode.trim() || editScenarioTitle.trim().slice(0, 20);
+      // Keep original DB id when editing existing; generate new id only for new scenarios
+      const id = editScenarioId ?? (editScenarioCode.trim() || editScenarioTitle.trim().replace(/\s+/g, "_").slice(0, 30));
       const { error } = await supabase.from("mda_scenarios").upsert({
         id,
         code: editScenarioCode.trim() || id,
@@ -1145,31 +1147,46 @@ export default function GraduationPage() {
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-gray-400">בחר תרחיש לעריכה</p>
-                  <button onClick={() => { setEditScenarioCode(""); setEditScenarioTitle(""); setEditStory(""); setEditVitals({}); setEditPhasesJson("[]"); setEditPhasesError(""); }}
+                  <button onClick={() => { setEditScenarioId(null); setEditScenarioCode(""); setEditScenarioTitle(""); setEditStory(""); setEditVitals({}); setEditPhasesJson("[]"); setEditPhasesError(""); }}
                     className="text-xs text-orange-400 hover:text-orange-300 transition-colors">+ תרחיש חדש</button>
                 </div>
                 <div className="space-y-1">
                   {savedScenarios.map(s => (
-                    <button key={s.id} onClick={async () => {
-                      const { data } = await supabase.from("mda_scenarios").select("*").eq("id", s.id).maybeSingle();
-                      if (data) {
-                        setEditScenarioCode(data.code || "");
-                        setEditScenarioTitle(data.title || "");
-                        setEditStory(data.story || "");
-                        setEditVitals((data.vitals as Record<string, string>) || {});
-                        setEditPhasesJson(JSON.stringify(data.phases || [], null, 2));
-                        setEditPhasesError("");
-                      }
-                    }} className={cn(
-                      "w-full text-right px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2",
-                      editScenarioTitle === s.title
-                        ? "bg-orange-600/20 border border-orange-500/40 text-orange-300"
-                        : "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-transparent"
+                    <div key={s.id} className={cn(
+                      "flex items-center gap-1 rounded-lg border transition-colors",
+                      editScenarioId === s.id
+                        ? "bg-orange-600/20 border-orange-500/40"
+                        : "bg-gray-800 border-transparent hover:border-gray-600"
                     )}>
-                      <span className="text-xs font-mono text-gray-500">{s.code}</span>
-                      <span className="flex-1">{s.title}</span>
-                      {editScenarioTitle === s.title && <span className="text-[10px] text-orange-400">עורך</span>}
-                    </button>
+                      {/* Select to edit */}
+                      <button onClick={async () => {
+                        const { data } = await supabase.from("mda_scenarios").select("*").eq("id", s.id).maybeSingle();
+                        if (data) {
+                          setEditScenarioId(data.id);
+                          setEditScenarioCode(data.code || "");
+                          setEditScenarioTitle(data.title || "");
+                          setEditStory(data.story || "");
+                          setEditVitals((data.vitals as Record<string, string>) || {});
+                          setEditPhasesJson(JSON.stringify(data.phases || [], null, 2));
+                          setEditPhasesError("");
+                        }
+                      }} className="flex-1 text-right px-3 py-2 text-sm flex items-center gap-2">
+                        <span className="text-xs font-mono text-gray-500">{s.code}</span>
+                        <span className={cn("flex-1", editScenarioId === s.id ? "text-orange-300" : "text-gray-300")}>{s.title}</span>
+                        {editScenarioId === s.id && <span className="text-[10px] text-orange-400">עורך</span>}
+                      </button>
+                      {/* Delete */}
+                      <button onClick={async () => {
+                        if (!confirm(`למחוק את התרחיש "${s.title}"? לא ניתן לשחזר.`)) return;
+                        await supabase.from("mda_scenarios").delete().eq("id", s.id);
+                        setSavedScenarios(prev => prev.filter(x => x.id !== s.id));
+                        if (editScenarioId === s.id) {
+                          setEditScenarioId(null); setEditScenarioCode(""); setEditScenarioTitle(""); setEditStory(""); setEditVitals({}); setEditPhasesJson("[]");
+                        }
+                      }} className="px-2 py-2 text-red-500/40 hover:text-red-400 transition-colors shrink-0">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -1336,159 +1353,54 @@ export default function GraduationPage() {
 
                 {/* Save all */}
                 {editScenarioError && <p className="text-xs text-red-400">{editScenarioError}</p>}
-                <button onClick={handleEditScenarioSave} disabled={editScenarioSaving || !editScenarioTitle.trim()}
-                  className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2">
-                  {editScenarioSaving ? <Loader2 size={15} className="animate-spin" /> : null}
-                  {editScenarioSaved ? "✓ נשמר!" : "שמור תרחיש + רובריקה"}
-                </button>
+                <div className="flex gap-2">
+                  {editScenarioId && (
+                    <button onClick={async () => {
+                      if (!confirm(`למחוק את התרחיש "${editScenarioTitle}"? לא ניתן לשחזר.`)) return;
+                      await supabase.from("mda_scenarios").delete().eq("id", editScenarioId);
+                      setSavedScenarios(prev => prev.filter(x => x.id !== editScenarioId));
+                      setEditScenarioId(null); setEditScenarioCode(""); setEditScenarioTitle(""); setEditStory(""); setEditVitals({}); setEditPhasesJson("[]");
+                    }} className="px-4 py-3 rounded-xl bg-red-600/20 border border-red-500/40 hover:bg-red-600/30 text-red-400 text-sm font-bold transition-colors flex items-center gap-2 shrink-0">
+                      <Trash2 size={15} /> מחיקת תרחיש
+                    </button>
+                  )}
+                  <button onClick={handleEditScenarioSave} disabled={editScenarioSaving || !editScenarioTitle.trim()}
+                    className="flex-1 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2">
+                    {editScenarioSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                    {editScenarioSaved ? "✓ נשמר!" : "שמירה"}
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {/* ── CONFIG TAB — rubric + fail criteria editor ── */}
           {pageTab === "config" && isPazOrAdmin && (
-            <div className="print:hidden space-y-6">
-              <div>
-                <p className="text-sm font-semibold text-violet-400 flex items-center gap-2"><Settings size={14} /> עריכת תצורת בחינה</p>
-                <p className="text-xs text-gray-500 mt-0.5">שינויים נשמרים ב-DB ומסונכרנים לכל הבוחנים בזמן אמת</p>
-              </div>
-
-              {/* Section A — Rubric Editor (exam-style preview) */}
-              <div className="space-y-4">
-                <p className="text-xs font-bold text-gray-300 uppercase tracking-wider">רובריקת הערכה — עריכה ישירה</p>
-                <p className="text-[10px] text-gray-600">ערוך את הטקסט ישירות. הכפתורים מדמים את מראה הבחינה האמיתית.</p>
-                {liveRubric.map((cat, catIdx) => (
-                  <div key={cat.id} className="bg-gray-900 border border-violet-500/20 rounded-xl overflow-hidden">
-                    {/* Category header — editable */}
-                    <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 border-b border-gray-700">
-                      <input
-                        value={cat.title}
-                        onChange={e => setLiveRubric(prev => prev.map((c, ci) => ci === catIdx ? { ...c, title: e.target.value } : c))}
-                        className="flex-1 bg-transparent text-sm font-semibold text-violet-300 focus:outline-none placeholder:text-gray-600 border-b border-transparent focus:border-violet-500"
-                        placeholder="שם קטגוריה..."
-                      />
-                      <button
-                        onClick={() => setLiveRubric(prev => prev.filter((_, ci) => ci !== catIdx))}
-                        className="p-1.5 text-red-500/50 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                        title="מחק קטגוריה"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                    {/* Items — exam-style rows with editable text */}
-                    <div className="divide-y divide-gray-800">
-                      {cat.items.map((item, itemIdx) => (
-                        <div key={itemIdx} className="flex items-center gap-2 px-3 py-2.5">
-                          {/* Score preview badge */}
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-700 text-gray-500 shrink-0 w-10 text-center">
-                            0/{item.maxScore}
-                          </span>
-                          {/* Editable text */}
-                          <input
-                            value={item.text}
-                            onChange={e => setLiveRubric(prev => prev.map((c, ci) => ci === catIdx
-                              ? { ...c, items: c.items.map((it, ii) => ii === itemIdx ? { ...it, text: e.target.value } : it) }
-                              : c))}
-                            className="flex-1 bg-transparent text-sm text-gray-200 focus:outline-none border-b border-transparent focus:border-violet-500 placeholder:text-gray-600"
-                            placeholder="פריט הערכה..."
-                          />
-                          {/* maxScore */}
-                          <input
-                            type="number" min={1} max={5}
-                            value={item.maxScore}
-                            onChange={e => setLiveRubric(prev => prev.map((c, ci) => ci === catIdx
-                              ? { ...c, items: c.items.map((it, ii) => ii === itemIdx ? { ...it, maxScore: Math.min(5, Math.max(1, Number(e.target.value))) } : it) }
-                              : c))}
-                            className="w-10 text-center bg-gray-800 border border-gray-700 rounded text-xs text-gray-400 focus:outline-none focus:border-violet-500 h-7"
-                            title="ניקוד מקסימלי"
-                          />
-                          {/* Decorative score buttons */}
-                          <div className="flex gap-1 shrink-0">
-                            {([3,2,1,0] as const).map(v => (
-                              <div key={v} className="w-8 h-8 rounded-lg text-xs font-bold border bg-gray-800 border-gray-700 text-gray-600 flex items-center justify-center">{v}</div>
-                            ))}
-                            <div className="w-8 h-8 rounded-lg text-xs font-bold border bg-gray-800 border-gray-700 text-gray-600 flex items-center justify-center">ל</div>
-                          </div>
-                          {/* Delete item */}
-                          <button
-                            onClick={() => setLiveRubric(prev => prev.map((c, ci) => ci === catIdx
-                              ? { ...c, items: c.items.filter((_, ii) => ii !== itemIdx) }
-                              : c))}
-                            className="p-1 text-red-500/40 hover:text-red-400 transition-colors shrink-0"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="px-4 py-2 border-t border-gray-800">
-                      <button
-                        onClick={() => setLiveRubric(prev => prev.map((c, ci) => ci === catIdx
-                          ? { ...c, items: [...c.items, { text: "", maxScore: 3 }] }
-                          : c))}
-                        className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                      >
-                        <Plus size={12} /> הוסף פריט
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                <button
-                  onClick={() => setLiveRubric(prev => [...prev, { id: `cat_${Date.now()}`, title: "קטגוריה חדשה", items: [{ text: "", maxScore: 3 }] }])}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-400 hover:bg-violet-500/20 transition-colors text-sm"
-                >
-                  <Plus size={14} /> הוסף קטגוריה
-                </button>
-              </div>
-
-              {/* Section B — Fail Criteria Editor */}
-              <div className="space-y-3">
-                <p className="text-xs font-bold text-gray-300 uppercase tracking-wider">קריטריוני כשלון אוטומטי</p>
-                <div className="space-y-2">
-                  {liveFailCriteria.map((fc, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        value={fc}
-                        onChange={e => setLiveFailCriteria(prev => prev.map((c, ci) => ci === i ? e.target.value : c))}
-                        className="flex-1 h-9 bg-gray-800 border border-gray-700 rounded-lg px-3 text-sm text-white focus:outline-none focus:border-red-500"
-                        placeholder="קריטריון כשלון..."
-                      />
-                      <button
-                        onClick={() => setLiveFailCriteria(prev => prev.filter((_, ci) => ci !== i))}
-                        className="p-2 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                        title="מחק קריטריון"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={() => setLiveFailCriteria(prev => [...prev, ""])}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors text-sm"
-                >
-                  <Plus size={14} /> הוסף קריטריון
-                </button>
-              </div>
-
-              {/* Save */}
-              <button
-                onClick={saveConfig}
-                disabled={configSaving}
-                className="w-full h-12 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold transition-colors flex items-center justify-center gap-2"
-              >
-                {configSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                {configSaved ? "✓ נשמר!" : "שמור תצורה"}
-              </button>
+            <div className="print:hidden flex flex-col items-center justify-center py-16 gap-4 text-center">
+              <Settings size={32} className="text-gray-700" />
+              <p className="text-sm font-semibold text-gray-400">הרובריקה נטענת אוטומטית מכל תרחיש</p>
+              <p className="text-xs text-gray-600 max-w-xs">לעריכת הצ׳קליסט של תרחיש ספציפי — עבור לטאב <span className="text-violet-400">עריכה</span> ובחר תרחיש</p>
             </div>
           )}
 
           {/* ── BANK TAB — pre-assign scenarios ── */}
           {pageTab === "bank" && (
             <div className="print:hidden space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-white">מאגר תרחישים</p>
-                <p className="text-xs text-gray-500 mt-0.5">שייך תרחיש לכל נבחן מראש — יוצג אוטומטית בשלב 3 של הבחינה</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">מאגר תרחישים</p>
+                  <p className="text-xs text-gray-500 mt-0.5">שייך תרחיש לכל נבחן מראש — יוצג אוטומטית בשלב 3 של הבחינה</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!confirm("למחוק את כל השיבוצים של כל הנבחנים? לא ניתן לשחזר.")) return;
+                    await supabase.from("candidate_scenarios").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+                    setBank(GROUPS.flatMap(g => g.candidates.map(c => ({ candidateName: c, groupId: g.id, slots: EMPTY_SLOTS.map(s=>({...s})), saved: false, saving: false }))));
+                  }}
+                  className="shrink-0 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors text-xs font-medium"
+                >
+                  🗑 אפס הכל
+                </button>
               </div>
 
               {!bankDbLoaded ? (
@@ -2260,7 +2172,42 @@ export default function GraduationPage() {
                 </div>
                 <button
                   disabled={!scenarioTitle.trim()}
-                  onClick={() => { setStep(4); setStartTime(new Date()); setTimeout(() => broadcastActive(true, 0), 500); }}
+                  onClick={async () => {
+                    // Load scenario-specific checklist from DB and build rubric
+                    const scenarioId = scenarioCode.trim() || scenarioTitle.trim();
+                    const { data: sc } = await supabase
+                      .from("mda_scenarios")
+                      .select("phases, fail_criteria")
+                      .or(`id.eq.${scenarioId},code.eq.${scenarioId},title.eq.${scenarioTitle.trim()}`)
+                      .maybeSingle();
+
+                    if (!sc?.phases || !Array.isArray(sc.phases) || sc.phases.length === 0) {
+                      alert("⚠️ לא נמצא צ'קליסט לתרחיש זה במאגר.\nוודא שהתרחיש קיים בטאב עריכה ושה-ID/קוד/שם תואם.");
+                      return;
+                    }
+
+                    // Convert scenario phases → rubric categories
+                    const scenarioRubric: RubricCategory[] = (sc.phases as any[]).map((phase: any) => {
+                      const steps = phase.steps ?? phase.actions ?? [];
+                      return {
+                        id: phase.id ?? phase.name ?? phase.title ?? String(Math.random()),
+                        title: phase.name ?? phase.title ?? "שלב",
+                        items: steps.map((s: any) => ({
+                          text: s.action ?? s.text ?? "",
+                          maxScore: s.maxScore ?? 2,
+                          expected: s.expected ?? null,
+                        })),
+                      };
+                    });
+                    setLiveRubric(scenarioRubric);
+                    if (sc.fail_criteria && Array.isArray(sc.fail_criteria)) {
+                      setLiveFailCriteria(sc.fail_criteria as string[]);
+                    }
+
+                    setStep(4);
+                    setStartTime(new Date());
+                    setTimeout(() => broadcastActive(true, 0), 500);
+                  }}
                   className="w-full h-12 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors text-sm mt-2"
                 >
                   התחל בחינה →
@@ -2537,7 +2484,12 @@ export default function GraduationPage() {
                                 {isHidden ? <Eye size={14} /> : <EyeOff size={14} />}
                               </button>
                             )}
-                            <p className="flex-1 text-sm text-gray-300 print:text-black leading-snug">{item.text}</p>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-300 print:text-black leading-snug">{item.text}</p>
+                              {item.expected && (
+                                <p className="text-[11px] text-teal-400/70 mt-0.5 leading-snug print:text-teal-700">💡 {item.expected}</p>
+                              )}
+                            </div>
                             {/* Fixed-width label — always present, no layout shift */}
                             <span className={cn(
                               "w-20 text-[10px] font-medium text-end shrink-0 print:hidden transition-colors",
