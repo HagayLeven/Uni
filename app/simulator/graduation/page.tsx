@@ -1431,12 +1431,9 @@ export default function GraduationPage() {
                         <div className="px-4 py-2 bg-gray-800 border-b border-teal-500/20">
                           <p className="text-xs font-semibold text-teal-400">📚 תרחישים זמינים ({bankScenarios.length})</p>
                         </div>
-                        <div className="p-3 space-y-3">
-                          {cats.map(cat => (
-                            <div key={cat}>
-                              <p className="text-xs font-semibold text-gray-400 mb-1.5">{CAT_LABELS[cat] ?? cat}</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {grouped[cat].map(s => (
+                        <div className="p-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            {cats.flatMap(cat => grouped[cat].map(s => (
                                   <div key={s.id} className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded-lg pl-1 pr-2 py-1">
                                     <span className="text-xs text-gray-300">
                                       <span className="font-mono text-gray-500 ml-1">{s.code}</span>{s.title}
@@ -1451,10 +1448,8 @@ export default function GraduationPage() {
                                       >✏️</a>
                                     )}
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
+                            )))}
+                          </div>
                         </div>
                       </div>
                     );
