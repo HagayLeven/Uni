@@ -161,7 +161,7 @@ export default function GraduationPage() {
         setIsSupervisor(true);
       } else {
         const { data: p } = await supabase.from("profiles").select("role, faculty, permissions").eq("id", user.id).single();
-        const adminUser = (p as any)?.faculty === "אדמיניסטרציה" || ["root","מנהל מערכת"].includes((p as any)?.role ?? "");
+        const adminUser = (p as any)?.faculty === "אדמיניסטרציה" || ["root","מנהל מערכת","מדריך ראשי"].includes((p as any)?.role ?? "");
         const editorUser = adminUser || ["מדריך ראשי","מדריך"].includes((p as any)?.role ?? "") || (p as any)?.permissions?.can_edit_scenarios === true;
         const supervisorUser = adminUser || (p as any)?.permissions?.supervisor_access === true || SUPERVISOR_EMAILS.includes(user.email ?? "");
         setIsAdmin(adminUser);
