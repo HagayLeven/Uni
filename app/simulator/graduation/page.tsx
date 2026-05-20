@@ -586,6 +586,7 @@ export default function GraduationPage() {
   const [candidate, setCandidate] = useState<string>("");
   const [scenarioCode, setScenarioCode] = useState<string>("");
   const [scenarioTitle, setScenarioTitle] = useState<string>("");
+  const [scenarioStory, setScenarioStory] = useState<string>("");
 
   // Load assigned scenarios when candidate selected (step 3)
   useEffect(() => {
@@ -2147,7 +2148,13 @@ export default function GraduationPage() {
                     {assignedForCandidate.map((slot, idx) => (
                       <button
                         key={idx}
-                        onClick={() => { setScenarioTitle(slot.title); setScenarioCode(slot.code ?? ""); }}
+                        onClick={async () => {
+                          setScenarioTitle(slot.title);
+                          setScenarioCode(slot.code ?? "");
+                          const id = slot.code || slot.title;
+                          const { data: sd } = await supabase.from("mda_scenarios").select("story").or(`id.eq.${id},code.eq.${id},title.eq.${slot.title}`).maybeSingle();
+                          setScenarioStory(sd?.story ?? "");
+                        }}
                         className={cn(
                           "w-full text-start px-4 py-3 rounded-xl border transition-colors",
                           scenarioTitle === slot.title
@@ -2161,6 +2168,13 @@ export default function GraduationPage() {
                     ))}
                   </div>
                   <p className="text-xs text-gray-600 mt-3 mb-1">או הזן ידנית:</p>
+                  {/* Story preview */}
+                  {scenarioStory && (
+                    <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
+                      <p className="text-[10px] font-semibold text-amber-400 mb-1">📋 מלל התרחיש לנבחן</p>
+                      <p className="text-sm text-gray-200 leading-relaxed">{scenarioStory}</p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2194,7 +2208,7 @@ export default function GraduationPage() {
                     const scenarioId = scenarioCode.trim() || scenarioTitle.trim();
                     const { data: sc } = await supabase
                       .from("mda_scenarios")
-                      .select("phases, fail_criteria")
+                      .select("phases, fail_criteria, story")
                       .or(`id.eq.${scenarioId},code.eq.${scenarioId},title.eq.${scenarioTitle.trim()}`)
                       .maybeSingle();
 
@@ -2220,6 +2234,7 @@ export default function GraduationPage() {
                     if (sc.fail_criteria && Array.isArray(sc.fail_criteria)) {
                       setLiveFailCriteria(sc.fail_criteria as string[]);
                     }
+                    if (sc.story) setScenarioStory(sc.story);
 
                     setStep(4);
                     setStartTime(new Date());
@@ -2276,6 +2291,14 @@ export default function GraduationPage() {
                   <ArrowRight size={10} /> שנה תרחיש
                 </button>
               </div>
+
+              {/* Scenario story */}
+              {scenarioStory && (
+                <div className="bg-gray-900 border border-amber-500/20 rounded-xl px-4 py-3 print:border-gray-300 print:bg-white">
+                  <p className="text-[10px] font-semibold text-amber-400 mb-1.5 print:text-gray-500">📋 מלל התרחיש — למסור לנבחן</p>
+                  <p className="text-sm text-gray-100 leading-relaxed print:text-black">{scenarioStory}</p>
+                </div>
+              )}
 
               {/* Live sync indicator */}
               <div className="print:hidden flex items-center gap-2 flex-wrap">
